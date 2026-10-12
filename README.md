@@ -17,11 +17,11 @@
 
 </div>
 
-# RapidRAW: Export on Conflict Edition
+# RapidRAW: Export on Conflict Feature Proposal
 
-> Intelligent conflict resolution engine for RapidRAW: 4 overwrite/skip policies, Blake3 sidecar fingerprinting, and zero-render performance optimization.
+> An upstream feature proposal for RapidRAW introducing intelligent export conflict resolution: 4 overwrite/skip policies, Blake3 sidecar fingerprinting, and zero-render skips.
 
-This repository is maintained by **[Binogulus](https://github.com/Binogulus)** as an unofficial fork of **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / CyberTimon](https://github.com/CyberTimon)), dedicated to introducing robust export conflict management.
+This repository serves as a public development and staging area maintained by **[Binogulus](https://github.com/Binogulus)** to design, test, and propose smart export conflict handling upstream to **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / @CyberTimon](https://github.com/CyberTimon)). The goal of this work is full integration into official RapidRAW releases.
 
 ---
 
