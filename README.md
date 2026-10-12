@@ -17,9 +17,54 @@
 
 </div>
 
-# RapidRAW
+# RapidRAW: Export on Conflict Edition
 
-> A beautiful, non-destructive, and GPU-accelerated RAW image editor built with performance in mind.
+> Intelligent conflict resolution engine for RapidRAW: 4 overwrite/skip policies, Blake3 sidecar fingerprinting, and zero-render performance optimization.
+
+This repository is maintained by **[Binogulus](https://github.com/Binogulus)** as an unofficial fork of **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / CyberTimon](https://github.com/CyberTimon)), dedicated to introducing robust export conflict management.
+
+---
+
+## ⚡ Smart Export Conflict Handling & Sidecar Fingerprinting
+
+A comprehensive conflict resolution engine for batch and single-photo exports, preventing accidental file overwriting while eliminating redundant re-rendering when source photos and adjustments are unchanged.
+
+<div align="center">
+
+| 🔄 **4 Conflict Policies** | 🔐 **Blake3 Fingerprinting** | ⚡ **Early Skip Optimization** |
+| :---: | :---: | :---: |
+| Create Unique, Overwrite, Overwrite if changed, Skip | Content & adjustment hash stored in `.rrdata` sidecars | Bypasses LibRaw decoding & GPU pipeline entirely |
+
+| 📊 **Detailed UI Reporting** | 🌐 **Multi-Language Support** | 💾 **Preset Persistence** |
+| :---: | :---: | :---: |
+| Breakdown of exported vs skipped images in UI & toasts | Full localization in English and Italian | Saved directly into custom export presets |
+
+</div>
+
+### ✨ Key Features of the Export Conflict Module
+
+* **4 Conflict Resolution Policies**:
+  * `Create unique` (default): Preserves RapidRAW's original behavior by appending numerical suffixes (`_1`, `_2`).
+  * `Overwrite`: Always replaces existing files in destination folder.
+  * `Overwrite if changed`: Inspects destination file existence and compares its settings with the last export fingerprint stored in the `.rrdata` sidecar. If adjustments, crop, format, or source mtime changed, it overwrites; if unchanged, it skips.
+  * `Skip`: Never overwrites any existing destination file.
+* **Decentralized Sidecar Architecture**:
+  * Adheres strictly to RapidRAW's decentralized `.rrdata` sidecar design.
+  * Tracks `last_exports` by target format with timestamp and cryptographic Blake3 hash.
+* **Significant Performance Savings**:
+  * When a photo is skipped under `overwrite if changed` or `skip`, the application bypasses LibRaw Bayer decoding, lens correction, and GPU shader rendering, freeing system resources instantly.
+* **Clear User Feedback**:
+  * Live status bar and completion buttons display exact counts (e.g., *"Exported 8, Skipped 4"* or *"All 12 photos up to date"*).
+  * System toast notifications provide instant clarity on batch results.
+  * Fully localized in English and Italian.
+
+---
+
+### 🤝 Upstream Project
+
+RapidRAW is created and maintained by **[Timon Käch (@CyberTimon)](https://github.com/CyberTimon/RapidRAW)**. For the upstream editor and official releases, visit **[getrapidraw.com](https://www.getrapidraw.com)**.
+
+---
 
 RapidRAW is a modern, high-performance alternative to Adobe Lightroom®. It delivers a simple, beautiful editing experience in a lightweight package (under 20MB) for Windows, macOS, Linux, and Android.
 
