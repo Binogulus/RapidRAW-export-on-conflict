@@ -330,12 +330,8 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
       handleMultiSelectClick(path, event, {
         shiftAnchor: selectionAnchorPath ?? libraryActivePath,
         updateLibraryActivePath: true,
-        onSimpleClick: (p: string, isAlreadySelected: boolean) => {
-          if (isAlreadySelected) {
-            setLibrary({ libraryActivePath: p, selectionAnchorPath: p });
-          } else {
-            setLibrary({ multiSelectedPaths: [p], libraryActivePath: p, selectionAnchorPath: p });
-          }
+        onSimpleClick: (p: string) => {
+          setLibrary({ multiSelectedPaths: [p], libraryActivePath: p, selectionAnchorPath: p });
           if (handleImageSelect) {
             handleImageSelect(p, false);
           }
@@ -354,12 +350,9 @@ export function useLibraryActions(handleImageSelect?: (path: string, openInEdito
       handleMultiSelectClick(path, event, {
         shiftAnchor: selectionAnchorPath ?? (inEditor ? selectedImage.path : libraryActivePath),
         updateLibraryActivePath: !inEditor,
-        onSimpleClick: (p: string, isAlreadySelected: boolean) => {
-          if (!isAlreadySelected) {
-            setLibrary({ multiSelectedPaths: [p] });
-          }
+        onSimpleClick: (p: string) => {
+          setLibrary({ multiSelectedPaths: [p], selectionAnchorPath: p });
           if (handleImageSelect) handleImageSelect(p);
-          setLibrary({ selectionAnchorPath: p });
         },
       });
     },

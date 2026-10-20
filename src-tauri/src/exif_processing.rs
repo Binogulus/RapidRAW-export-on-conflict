@@ -683,10 +683,48 @@ pub fn extract_metadata(file_bytes: &[u8]) -> Option<HashMap<String, String>> {
     }
 
     if !map.is_empty() {
-        if !map.contains_key("LensModel")
-            && let Some(lens) = read_raw_metadata(file_bytes).and_then(|meta| meta.lens)
-        {
-            insert_missing_lens_fields(&mut map, &lens);
+        if let Some(raw_meta) = read_raw_metadata(file_bytes) {
+            if !map.contains_key("LensModel")
+                && let Some(lens) = raw_meta.lens
+            {
+                insert_missing_lens_fields(&mut map, &lens);
+            }
+            if !map.contains_key("GPSLatitude") && let Some(gps) = raw_meta.exif.gps {
+                let fmt_rat = |r: &rawler::formats::tiff::Rational| -> f32 {
+                    if r.d == 0 {
+                        0.0
+                    } else {
+                        r.n as f32 / r.d as f32
+                    }
+                };
+                let fmt_gps_coord = |coords: &[rawler::formats::tiff::Rational; 3]| -> String {
+                    format!(
+                        "{} deg {} min {} sec",
+                        fmt_rat(&coords[0]),
+                        fmt_rat(&coords[1]),
+                        fmt_rat(&coords[2])
+                    )
+                };
+
+                if let Some(lat) = gps.gps_latitude {
+                    map.insert("GPSLatitude".to_string(), fmt_gps_coord(&lat));
+                }
+                if let Some(lat_ref) = gps.gps_latitude_ref {
+                    map.insert("GPSLatitudeRef".to_string(), lat_ref);
+                }
+                if let Some(lon) = gps.gps_longitude {
+                    map.insert("GPSLongitude".to_string(), fmt_gps_coord(&lon));
+                }
+                if let Some(lon_ref) = gps.gps_longitude_ref {
+                    map.insert("GPSLongitudeRef".to_string(), lon_ref);
+                }
+                if let Some(alt) = gps.gps_altitude {
+                    map.insert("GPSAltitude".to_string(), fmt_rat(&alt).to_string());
+                }
+                if let Some(alt_ref) = gps.gps_altitude_ref {
+                    map.insert("GPSAltitudeRef".to_string(), alt_ref.to_string());
+                }
+            }
         }
         return Some(map);
     }
@@ -1534,14 +1572,58 @@ pub fn write_image_with_metadata(
     }
 
     if !strip_gps {
-        if is_raw_file(original_path_str) {
-            apply_gps_from_rawler(&mut metadata, original_path_str);
-        } else {
-            apply_gps_from_kamadak(&mut metadata, original_path);
+        let sidecar_map = read_rrexif_sidecar(original_path);
+        let mut gps_applied = false;
+        if let Some(ref map) = sidecar_map {
+            if let (Some(lat_str), Some(lon_str)) = (map.get("GPSLatitude"), map.get("GPSLongitude")) {
+                let lat_ref = map.get("GPSLatitudeRef").map(|s| s.as_str()).unwrap_or("N");
+                let lon_ref = map.get("GPSLongitudeRef").map(|s| s.as_str()).unwrap_or("E");
+                if let (Some((lat_d, lat_m, lat_s)), Some((lon_d, lon_m, lon_s))) = (
+                    crate::file_management::parse_gps_components(lat_str),
+                    crate::file_management::parse_gps_components(lon_str),
+                ) {
+                    metadata.set_tag(ExifTag::GPSLatitude(vec![
+                        uR64 { nominator: lat_d, denominator: 1 },
+                        uR64 { nominator: (lat_m * 1000.0).round() as u32, denominator: 1000 },
+                        uR64 { nominator: (lat_s * 10000.0).round() as u32, denominator: 10000 },
+                    ]));
+                    metadata.set_tag(ExifTag::GPSLatitudeRef(lat_ref.to_string()));
+                    metadata.set_tag(ExifTag::GPSLongitude(vec![
+                        uR64 { nominator: lon_d, denominator: 1 },
+                        uR64 { nominator: (lon_m * 1000.0).round() as u32, denominator: 1000 },
+                        uR64 { nominator: (lon_s * 10000.0).round() as u32, denominator: 10000 },
+                    ]));
+                    metadata.set_tag(ExifTag::GPSLongitudeRef(lon_ref.to_string()));
+                    gps_applied = true;
+                }
+            } else if map.get("IsGpsModified").map(|s| s == "true").unwrap_or(false) {
+                metadata.remove_tag(ExifTag::GPSLatitude(Vec::new()));
+                metadata.remove_tag(ExifTag::GPSLatitudeRef(String::new()));
+                metadata.remove_tag(ExifTag::GPSLongitude(Vec::new()));
+                metadata.remove_tag(ExifTag::GPSLongitudeRef(String::new()));
+                metadata.remove_tag(ExifTag::GPSAltitude(Vec::new()));
+                metadata.remove_tag(ExifTag::GPSAltitudeRef(Vec::new()));
+                gps_applied = true;
+            }
         }
+
+        if !gps_applied {
+            if is_raw_file(original_path_str) {
+                apply_gps_from_rawler(&mut metadata, original_path_str);
+            } else {
+                apply_gps_from_kamadak(&mut metadata, original_path);
+            }
+        }
+    } else {
+        metadata.remove_tag(ExifTag::GPSLatitude(Vec::new()));
+        metadata.remove_tag(ExifTag::GPSLatitudeRef(String::new()));
+        metadata.remove_tag(ExifTag::GPSLongitude(Vec::new()));
+        metadata.remove_tag(ExifTag::GPSLongitudeRef(String::new()));
+        metadata.remove_tag(ExifTag::GPSAltitude(Vec::new()));
+        metadata.remove_tag(ExifTag::GPSAltitudeRef(Vec::new()));
     }
 
-    if full_exif_copied && let Some(map) = read_rrexif_sidecar(original_path) {
+    if let Some(map) = read_rrexif_sidecar(original_path) {
         apply_sidecar_field_overrides(&mut metadata, &map);
     }
 
@@ -1620,6 +1702,12 @@ pub fn read_exif_data_from_bytes(path: &str, file_bytes: &[u8]) -> HashMap<Strin
     {
         if map.contains_key("GPSLatitude") && map.contains_key("GPSLongitude") {
             map.insert("HasNativeGPS".to_string(), "true".to_string());
+            if !map.contains_key("OriginalGPSLatitude") {
+                map.insert("OriginalGPSLatitude".to_string(), map["GPSLatitude"].clone());
+                map.insert("OriginalGPSLatitudeRef".to_string(), map.get("GPSLatitudeRef").cloned().unwrap_or_else(|| "N".to_string()));
+                map.insert("OriginalGPSLongitude".to_string(), map["GPSLongitude"].clone());
+                map.insert("OriginalGPSLongitudeRef".to_string(), map.get("GPSLongitudeRef").cloned().unwrap_or_else(|| "E".to_string()));
+            }
         }
         return map;
     }
@@ -1645,6 +1733,12 @@ pub fn read_exif_data_from_bytes(path: &str, file_bytes: &[u8]) -> HashMap<Strin
     }
     if exif_data.contains_key("GPSLatitude") && exif_data.contains_key("GPSLongitude") {
         exif_data.insert("HasNativeGPS".to_string(), "true".to_string());
+        if !exif_data.contains_key("OriginalGPSLatitude") {
+            exif_data.insert("OriginalGPSLatitude".to_string(), exif_data["GPSLatitude"].clone());
+            exif_data.insert("OriginalGPSLatitudeRef".to_string(), exif_data.get("GPSLatitudeRef").cloned().unwrap_or_else(|| "N".to_string()));
+            exif_data.insert("OriginalGPSLongitude".to_string(), exif_data["GPSLongitude"].clone());
+            exif_data.insert("OriginalGPSLongitudeRef".to_string(), exif_data.get("GPSLongitudeRef").cloned().unwrap_or_else(|| "E".to_string()));
+        }
     }
     exif_data
 }

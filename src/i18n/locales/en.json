@@ -1243,7 +1243,7 @@
       "undoTooltip": "Undo GPS change (Ctrl+Z)",
       "undoDisabled": "No GPS changes to undo",
       "revertSuccess": "Restored original camera GPS coordinates for {{count}} photo(s)",
-      "dragToReposition": "Drag pin to reposition",
+      "dragToReposition": "Drag image to reposition",
       "dragToMap": "Drag onto map",
       "resizeDock": "Drag to resize",
       "closeDock": "Close panel",
@@ -1253,7 +1253,11 @@
       "errorSavingGps": "Error saving GPS coordinates: {{err}}",
       "geotagSuccess": "Successfully geotagged {{count}} photo(s)",
       "repositionedSuccess": "Successfully repositioned {{count}} photo(s)",
-      "geotagRemoved": "Removed GPS coordinates for {{count}} photo(s)"
+      "geotagRemoved": "Removed GPS coordinates for {{count}} photo(s)",
+      "repositionPhotoBtn": "Reposition",
+      "clickToPlacePhoto": "Click on the map to place this photo (ESC to cancel)",
+      "repositioningModeTitle": "Click on the map to place photo",
+      "pressEscToCancel": "Press ESC to cancel"
     }
   },
   "masks": {

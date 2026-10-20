@@ -1482,6 +1482,7 @@ fn compute_export_fingerprint(
     adjustments: &serde_json::Value,
     output_format: &str,
     export_settings: &ExportSettings,
+    gps_info: Option<&(Option<String>, Option<String>, Option<String>)>,
 ) -> String {
     #[derive(Serialize)]
     #[serde(rename_all = "camelCase")]
@@ -1500,6 +1501,9 @@ fn compute_export_fingerprint(
         preserve_timestamps: bool,
         strip_gps: bool,
         export_masks: bool,
+        gps_latitude: Option<&'a str>,
+        gps_longitude: Option<&'a str>,
+        gps_modified: Option<&'a str>,
     }
 
     let payload = FingerprintPayload {
@@ -1517,6 +1521,9 @@ fn compute_export_fingerprint(
         preserve_timestamps: export_settings.preserve_timestamps,
         strip_gps: export_settings.strip_gps,
         export_masks: export_settings.export_masks,
+        gps_latitude: gps_info.and_then(|(lat, _, _)| lat.as_deref()),
+        gps_longitude: gps_info.and_then(|(_, lon, _)| lon.as_deref()),
+        gps_modified: gps_info.and_then(|(_, _, modif)| modif.as_deref()),
     };
 
     let serialized = serde_json::to_vec(&payload).unwrap_or_default();
@@ -1799,12 +1806,22 @@ pub(crate) async fn export_images_impl(
                     .map(|d| d.as_millis() as u64)
                     .unwrap_or(0);
 
+                let sidecar_map = crate::exif_processing::read_rrexif_sidecar(&source_path);
+                let gps_info = sidecar_map.as_ref().map(|m| {
+                    (
+                        m.get("GPSLatitude").cloned(),
+                        m.get("GPSLongitude").cloned(),
+                        m.get("IsGpsModified").cloned(),
+                    )
+                });
+
                 let current_fingerprint = compute_export_fingerprint(
                     &source_path,
                     source_mtime,
                     &js_adjustments,
                     &output_format,
                     &export_settings,
+                    gps_info.as_ref(),
                 );
 
                 let mut should_skip = false;
@@ -2627,23 +2644,31 @@ mod tests {
             on_conflict: ConflictAction::OverwriteIfChanged,
         };
 
-        let fp1 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base);
-        let fp1_dup = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base);
+        let fp1 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base, None);
+        let fp1_dup = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base, None);
         assert_eq!(fp1, fp1_dup, "Fingerprint must be deterministic");
 
-        let fp2 = compute_export_fingerprint(path, mtime, &adj2, "jpg", &settings_base);
+        let fp2 = compute_export_fingerprint(path, mtime, &adj2, "jpg", &settings_base, None);
         assert_ne!(fp1, fp2, "Adjustment change must change fingerprint");
 
         let mut settings_quality = settings_base.clone();
         settings_quality.jpeg_quality = 80;
-        let fp3 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_quality);
+        let fp3 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_quality, None);
         assert_ne!(fp1, fp3, "Quality change must change fingerprint");
 
-        let fp4 = compute_export_fingerprint(path, mtime + 1000, &adj1, "jpg", &settings_base);
+        let fp4 = compute_export_fingerprint(path, mtime + 1000, &adj1, "jpg", &settings_base, None);
         assert_ne!(fp1, fp4, "File mtime change must change fingerprint");
 
-        let fp5 = compute_export_fingerprint(path, mtime, &adj1, "png", &settings_base);
+        let fp5 = compute_export_fingerprint(path, mtime, &adj1, "png", &settings_base, None);
         assert_ne!(fp1, fp5, "Format change must change fingerprint");
+
+        let gps_test_info = (
+            Some("41 deg 53 min 30 sec".to_string()),
+            Some("12 deg 29 min 10 sec".to_string()),
+            Some("true".to_string()),
+        );
+        let fp_gps = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base, Some(&gps_test_info));
+        assert_ne!(fp1, fp_gps, "GPS change must change fingerprint");
     }
 
     #[test]

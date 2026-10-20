@@ -35,7 +35,13 @@ export default function Controls() {
   const { showContextMenu } = useContextMenu();
   const { isResizingWaveform, onToggleWaveform, setActiveWaveformChannel, handleWaveformResize } =
     useWaveformControls();
-  const { setAdjustments, handleAutoAdjustments, handleLutSelect, setLutPreviewOverride } = useEditorActions();
+  const {
+    setAdjustments,
+    handleAutoAdjustments,
+    handleLutSelect,
+    setLutPreviewOverride,
+    handleResetAdjustments: handleResetAdjustmentsAction,
+  } = useEditorActions();
 
   const { appSettings, theme } = useSettingsStore(
     useShallow((state) => ({
@@ -116,16 +122,20 @@ export default function Controls() {
   };
 
   const handleResetAdjustments = () => {
-    setAdjustments((prev: Adjustments) => ({
-      ...prev,
-      ...Object.keys(ADJUSTMENT_SECTIONS)
-        .flatMap((s) => ADJUSTMENT_SECTIONS[s])
-        .reduce((acc: any, key: string) => {
-          acc[key] = INITIAL_ADJUSTMENTS[key as keyof Adjustments];
-          return acc;
-        }, {}),
-      sectionVisibility: { ...INITIAL_ADJUSTMENTS.sectionVisibility },
-    }));
+    if (selectedImage?.path) {
+      handleResetAdjustmentsAction([selectedImage.path]);
+    } else {
+      setAdjustments((prev: Adjustments) => ({
+        ...prev,
+        ...Object.keys(ADJUSTMENT_SECTIONS)
+          .flatMap((s) => ADJUSTMENT_SECTIONS[s])
+          .reduce((acc: any, key: string) => {
+            acc[key] = INITIAL_ADJUSTMENTS[key as keyof Adjustments];
+            return acc;
+          }, {}),
+        sectionVisibility: { ...INITIAL_ADJUSTMENTS.sectionVisibility },
+      }));
+    }
   };
 
   const handleToggleSection = (section: string) => {

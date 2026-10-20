@@ -17,6 +17,7 @@ import {
 import { calculateCenteredCrop } from '../utils/cropUtils';
 import { Invokes } from '../components/ui/AppProperties';
 import { globalImageCache } from '../utils/ImageLRUCache';
+import { toDmsString } from '../utils/gpsUtils';
 
 export const debouncedSetHistory = debounce((newAdj: Adjustments) => {
   useEditorStore.getState().pushHistory(newAdj);
@@ -185,8 +186,8 @@ export function useEditorActions() {
       pathsToReset.forEach((p) => globalImageCache.delete(p));
       debouncedSetHistory.cancel();
 
-      invoke(Invokes.ResetAdjustmentsForPaths, { paths: pathsToReset })
-        .then(() => {
+      invoke<Record<string, [number, number] | null>>(Invokes.ResetAdjustmentsForPaths, { paths: pathsToReset })
+        .then((revertedGpsMap) => {
           if (libraryActivePath && pathsToReset.includes(libraryActivePath))
             setLibrary({ libraryActiveAdjustments: { ...INITIAL_ADJUSTMENTS } });
           if (selectedImage && pathsToReset.includes(selectedImage.path)) {
@@ -195,6 +196,102 @@ export function useEditorActions() {
             const resetData = { ...INITIAL_ADJUSTMENTS, aspectRatio: aspect, aiPatches: [] };
             resetHistory(resetData);
             setEditor({ adjustments: resetData });
+          }
+
+          if (revertedGpsMap && typeof revertedGpsMap === 'object') {
+            const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
+            const targetsSet = new Set(pathsToReset.map(normalizePath));
+
+            setLibrary((state) => ({
+              imageList: state.imageList.map((img) => {
+                const norm = normalizePath(img.path);
+                if (!targetsSet.has(norm)) return img;
+
+                const coords =
+                  revertedGpsMap[img.path] !== undefined ? revertedGpsMap[img.path] : revertedGpsMap[norm];
+                const currentExif = img.exif ? { ...img.exif } : {};
+                delete currentExif.IsGpsModified;
+
+                if (coords) {
+                  const [lat, lon] = coords;
+                  return {
+                    ...img,
+                    is_edited: false,
+                    exif: {
+                      ...currentExif,
+                      GPSLatitude: toDmsString(lat),
+                      GPSLatitudeRef: lat >= 0 ? 'N' : 'S',
+                      GPSLongitude: toDmsString(lon),
+                      GPSLongitudeRef: lon >= 0 ? 'E' : 'W',
+                      HasNativeGPS: 'true',
+                    },
+                  };
+                } else {
+                  delete currentExif.GPSLatitude;
+                  delete currentExif.GPSLatitudeRef;
+                  delete currentExif.GPSLongitude;
+                  delete currentExif.GPSLongitudeRef;
+                  delete currentExif.OriginalGPSLatitude;
+                  delete currentExif.OriginalGPSLatitudeRef;
+                  delete currentExif.OriginalGPSLongitude;
+                  delete currentExif.OriginalGPSLongitudeRef;
+                  currentExif.HasNativeGPS = 'false';
+                  return {
+                    ...img,
+                    is_edited: false,
+                    exif: currentExif,
+                  };
+                }
+              }),
+            }));
+
+            useEditorStore.getState().setEditor((state) => {
+              if (!state.selectedImage) return state;
+              const norm = normalizePath(state.selectedImage.path);
+              if (!targetsSet.has(norm)) return state;
+
+              const coords =
+                revertedGpsMap[state.selectedImage.path] !== undefined
+                  ? revertedGpsMap[state.selectedImage.path]
+                  : revertedGpsMap[norm];
+              const currentExif = state.selectedImage.exif ? { ...state.selectedImage.exif } : {};
+              delete currentExif.IsGpsModified;
+
+              if (coords) {
+                const [lat, lon] = coords;
+                return {
+                  selectedImage: {
+                    ...state.selectedImage,
+                    is_edited: false,
+                    exif: {
+                      ...currentExif,
+                      GPSLatitude: toDmsString(lat),
+                      GPSLatitudeRef: lat >= 0 ? 'N' : 'S',
+                      GPSLongitude: toDmsString(lon),
+                      GPSLongitudeRef: lon >= 0 ? 'E' : 'W',
+                      HasNativeGPS: 'true',
+                    },
+                  },
+                };
+              } else {
+                delete currentExif.GPSLatitude;
+                delete currentExif.GPSLatitudeRef;
+                delete currentExif.GPSLongitude;
+                delete currentExif.GPSLongitudeRef;
+                delete currentExif.OriginalGPSLatitude;
+                delete currentExif.OriginalGPSLatitudeRef;
+                delete currentExif.OriginalGPSLongitude;
+                delete currentExif.OriginalGPSLongitudeRef;
+                currentExif.HasNativeGPS = 'false';
+                return {
+                  selectedImage: {
+                    ...state.selectedImage,
+                    is_edited: false,
+                    exif: currentExif,
+                  },
+                };
+              }
+            });
           }
         })
         .catch((err) => toast.error(`Failed to reset adjustments: ${err}`));

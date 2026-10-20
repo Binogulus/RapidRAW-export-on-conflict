@@ -1269,7 +1269,7 @@
       "undoTooltip": "Annulla modifica GPS (Ctrl+Z)",
       "undoDisabled": "Nessuna modifica GPS da annullare",
       "revertSuccess": "Ripristinate coordinate originali della fotocamera per {{count}} foto",
-      "dragToReposition": "Trascina il segnaposto per riposizionare",
+      "dragToReposition": "Trascina immagine per riposizionare",
       "dragToMap": "Trascina sulla mappa",
       "resizeDock": "Trascina per ridimensionare",
       "closeDock": "Chiudi pannello",
@@ -1279,7 +1279,11 @@
       "errorSavingGps": "Errore nel salvataggio coordinate: {{err}}",
       "geotagSuccess": "Posizionate {{count}} foto con successo",
       "repositionedSuccess": "Foto riposizionata con successo",
-      "geotagRemoved": "Coordinate GPS rimosse per {{count}} foto"
+      "geotagRemoved": "Coordinate GPS rimosse per {{count}} foto",
+      "repositionPhotoBtn": "Riposiziona",
+      "clickToPlacePhoto": "Fai click sulla mappa per riposizionare questa foto (ESC per annullare)",
+      "repositioningModeTitle": "Fai clic sulla mappa per posizionare la foto",
+      "pressEscToCancel": "Premi ESC per annullare"
     }
   },
   "masks": {

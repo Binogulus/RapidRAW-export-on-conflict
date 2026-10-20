@@ -103,8 +103,18 @@ fn resolve_image_metadata(
 
     let is_raw = crate::formats::is_raw_file(image_path);
     let tm_override = crate::image_processing::resolve_tonemapper_override(settings, is_raw);
-    let is_edited =
+    let is_adj_edited =
         crate::image_processing::is_image_edited(&metadata.adjustments, is_raw, tm_override);
+    let is_gps_edited = metadata
+        .exif
+        .as_ref()
+        .map(|emap| {
+            emap.get("IsGpsModified")
+                .map(|v| v == "true")
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+    let is_edited = is_adj_edited || is_gps_edited;
     ImageFileMetadata {
         is_edited,
         tags: metadata.tags,
@@ -2738,35 +2748,138 @@ pub async fn apply_adjustments_to_paths(
     Ok(())
 }
 
+pub fn revert_gps_in_metadata_and_cache(
+    source_path: &Path,
+    metadata: &mut ImageMetadata,
+) -> Option<(f64, f64)> {
+    let mut exif_map = metadata.exif.clone().unwrap_or_default();
+
+    // 1. Try restoring from preserved original camera GPS in sidecar
+    let orig_from_sidecar = if let (Some(orig_lat_str), Some(orig_lon_str)) = (
+        exif_map.get("OriginalGPSLatitude"),
+        exif_map.get("OriginalGPSLongitude"),
+    ) {
+        let lat_ref = exif_map
+            .get("OriginalGPSLatitudeRef")
+            .cloned()
+            .unwrap_or_else(|| "N".to_string());
+        let lon_ref = exif_map
+            .get("OriginalGPSLongitudeRef")
+            .cloned()
+            .unwrap_or_else(|| "E".to_string());
+        if let (Some((ld, lm, ls)), Some((od, om, os))) = (
+            parse_gps_components(orig_lat_str),
+            parse_gps_components(orig_lon_str),
+        ) {
+            let mut lat_val = ld as f64 + lm / 60.0 + ls / 3600.0;
+            if lat_ref.to_uppercase() == "S" {
+                lat_val = -lat_val;
+            }
+            let mut lon_val = od as f64 + om / 60.0 + os / 3600.0;
+            if lon_ref.to_uppercase() == "W" {
+                lon_val = -lon_val;
+            }
+            Some((lat_val, lon_val, orig_lat_str.clone(), lat_ref, orig_lon_str.clone(), lon_ref))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // 2. Fallback to re-extracting native GPS from original file bytes
+    let native_opt = orig_from_sidecar.or_else(|| extract_native_gps(source_path));
+
+    let ret = if let Some((lat_val, lon_val, lat_str, lat_ref, lon_str, lon_ref)) = native_opt {
+        exif_map.insert("GPSLatitude".to_string(), lat_str.clone());
+        exif_map.insert("GPSLatitudeRef".to_string(), lat_ref.clone());
+        exif_map.insert("GPSLongitude".to_string(), lon_str.clone());
+        exif_map.insert("GPSLongitudeRef".to_string(), lon_ref.clone());
+        exif_map.insert("OriginalGPSLatitude".to_string(), lat_str);
+        exif_map.insert("OriginalGPSLatitudeRef".to_string(), lat_ref);
+        exif_map.insert("OriginalGPSLongitude".to_string(), lon_str);
+        exif_map.insert("OriginalGPSLongitudeRef".to_string(), lon_ref);
+        exif_map.insert("HasNativeGPS".to_string(), "true".to_string());
+        exif_map.remove("IsGpsModified");
+
+        crate::exif_processing::save_exif_to_rrcache(source_path, exif_map.clone());
+        metadata.exif = Some(exif_map);
+        Some((lat_val, lon_val))
+    } else {
+        exif_map.remove("GPSLatitude");
+        exif_map.remove("GPSLatitudeRef");
+        exif_map.remove("GPSLongitude");
+        exif_map.remove("GPSLongitudeRef");
+        exif_map.remove("OriginalGPSLatitude");
+        exif_map.remove("OriginalGPSLatitudeRef");
+        exif_map.remove("OriginalGPSLongitude");
+        exif_map.remove("OriginalGPSLongitudeRef");
+        exif_map.remove("IsGpsModified");
+        exif_map.insert("HasNativeGPS".to_string(), "false".to_string());
+        crate::exif_processing::save_exif_to_rrcache(source_path, exif_map.clone());
+        metadata.exif = Some(exif_map);
+        None
+    };
+
+    metadata.last_modified = Some(chrono::Utc::now().to_rfc3339());
+    ret
+}
+
 #[tauri::command]
 pub async fn reset_adjustments_for_paths(
     paths: Vec<String>,
     app_handle: AppHandle,
-) -> Result<(), String> {
+) -> Result<HashMap<String, Option<(f64, f64)>>, String> {
     let state = app_handle.state::<AppState>();
     add_to_thumbnail_queue(&state, paths.len(), &app_handle);
 
-    tauri::async_runtime::spawn_blocking(move || {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let settings = load_settings(app_handle.clone()).unwrap_or_default();
         let enable_xmp_sync = settings.enable_xmp_sync.unwrap_or(false);
         let create_xmp_if_missing = settings.create_xmp_if_missing.unwrap_or(false);
 
-        paths.par_iter().for_each(|path| {
-            let (_, sidecar_path) = parse_virtual_path(path);
+        let gps_results: Vec<(String, Option<(f64, f64)>)> = paths
+            .par_iter()
+            .map(|path| {
+                let (source_path, sidecar_path) = parse_virtual_path(path);
 
-            let mut existing_metadata = crate::exif_processing::load_sidecar(&sidecar_path);
+                let mut existing_metadata =
+                    crate::exif_processing::load_sidecar_with_exif(&sidecar_path, &source_path);
 
-            existing_metadata.adjustments = serde_json::json!({});
+                existing_metadata.adjustments = serde_json::json!({});
 
-            if let Ok(json_string) = serde_json::to_string_pretty(&existing_metadata) {
-                let _ = std::fs::write(&sidecar_path, json_string);
-            }
+                let gps_coords =
+                    revert_gps_in_metadata_and_cache(&source_path, &mut existing_metadata);
 
-            if enable_xmp_sync {
-                let source_path = parse_virtual_path(path).0;
-                sync_metadata_to_xmp(&source_path, &existing_metadata, create_xmp_if_missing);
-            }
-        });
+                if let Ok(json_string) = serde_json::to_string_pretty(&existing_metadata) {
+                    let _ = std::fs::write(&sidecar_path, json_string);
+                }
+
+                if enable_xmp_sync {
+                    sync_metadata_to_xmp(&source_path, &existing_metadata, create_xmp_if_missing);
+                }
+
+                let is_raw = crate::formats::is_raw_file(&source_path);
+                let tm_override =
+                    crate::image_processing::resolve_tonemapper_override(&settings, is_raw);
+                let is_adj_edited = crate::image_processing::is_image_edited(
+                    &existing_metadata.adjustments,
+                    is_raw,
+                    tm_override,
+                );
+
+                emit_image_metadata_loaded(
+                    &app_handle,
+                    path,
+                    existing_metadata.rating,
+                    existing_metadata.flag,
+                    is_adj_edited,
+                    &existing_metadata.tags,
+                );
+
+                (path.clone(), gps_coords)
+            })
+            .collect();
 
         let state = app_handle.state::<AppState>();
         let thumb_cache_dir = match resolve_thumbnail_cache_dir(&app_handle) {
@@ -2779,7 +2892,7 @@ pub async fn reset_adjustments_for_paths(
                 for _ in 0..paths.len() {
                     increment_thumbnail_progress(&state, &app_handle);
                 }
-                return;
+                return gps_results.into_iter().collect::<HashMap<_, _>>();
             }
         };
 
@@ -2809,9 +2922,15 @@ pub async fn reset_adjustments_for_paths(
 
             increment_thumbnail_progress(&state, &app_handle);
         });
-    });
 
-    Ok(())
+        gps_results.into_iter().collect::<HashMap<_, _>>()
+    })
+    .await;
+
+    match result {
+        Ok(map) => Ok(map),
+        Err(e) => Err(format!("Task failed: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -3151,13 +3270,48 @@ pub fn set_gps_for_paths(
         let mut metadata =
             crate::exif_processing::load_sidecar_with_exif(&sidecar_path, &source_path);
 
-        let has_native = if let Some(ref emap) = metadata.exif {
-            emap.get("HasNativeGPS").map(|v| v == "true").unwrap_or_else(|| {
-                extract_native_gps(&source_path).is_some()
-            })
+        let mut exif_map = metadata.exif.clone().unwrap_or_default();
+
+        // 1. Determine or preserve original camera GPS
+        let has_orig = exif_map.contains_key("OriginalGPSLatitude");
+        let has_native = if has_orig {
+            true
+        } else if let Some(v) = exif_map.get("HasNativeGPS") {
+            v == "true"
+        } else if let Some((_, _, lat_s, lat_r, lon_s, lon_r)) = extract_native_gps(&source_path) {
+            exif_map.insert("OriginalGPSLatitude".to_string(), lat_s);
+            exif_map.insert("OriginalGPSLatitudeRef".to_string(), lat_r);
+            exif_map.insert("OriginalGPSLongitude".to_string(), lon_s);
+            exif_map.insert("OriginalGPSLongitudeRef".to_string(), lon_r);
+            exif_map.insert("HasNativeGPS".to_string(), "true".to_string());
+            true
         } else {
-            extract_native_gps(&source_path).is_some()
+            exif_map.insert("HasNativeGPS".to_string(), "false".to_string());
+            false
         };
+
+        // If native GPS was present but OriginalGPSLatitude was not yet recorded, record it from current GPS if not yet modified
+        if has_native && !exif_map.contains_key("OriginalGPSLatitude") {
+            if exif_map.get("IsGpsModified").map(|s| s != "true").unwrap_or(true) {
+                if let (Some(cur_lat), Some(cur_lon)) = (
+                    exif_map.get("GPSLatitude").cloned(),
+                    exif_map.get("GPSLongitude").cloned(),
+                ) {
+                    let cur_lat_ref = exif_map
+                        .get("GPSLatitudeRef")
+                        .cloned()
+                        .unwrap_or_else(|| "N".to_string());
+                    let cur_lon_ref = exif_map
+                        .get("GPSLongitudeRef")
+                        .cloned()
+                        .unwrap_or_else(|| "E".to_string());
+                    exif_map.insert("OriginalGPSLatitude".to_string(), cur_lat);
+                    exif_map.insert("OriginalGPSLatitudeRef".to_string(), cur_lat_ref);
+                    exif_map.insert("OriginalGPSLongitude".to_string(), cur_lon);
+                    exif_map.insert("OriginalGPSLongitudeRef".to_string(), cur_lon_ref);
+                }
+            }
+        }
 
         if let (Some(lat), Some(lon)) = (latitude, longitude) {
             if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) {
@@ -3166,26 +3320,35 @@ pub fn set_gps_for_paths(
                 let lon_str = to_dms_string(lon);
                 let lon_ref = if lon >= 0.0 { "E" } else { "W" }.to_string();
 
-                let mut exif_map = metadata.exif.unwrap_or_default();
                 exif_map.insert("GPSLatitude".to_string(), lat_str);
                 exif_map.insert("GPSLatitudeRef".to_string(), lat_ref);
                 exif_map.insert("GPSLongitude".to_string(), lon_str);
                 exif_map.insert("GPSLongitudeRef".to_string(), lon_ref);
+                exif_map.insert("IsGpsModified".to_string(), "true".to_string());
                 if has_native {
                     exif_map.insert("HasNativeGPS".to_string(), "true".to_string());
-                    exif_map.insert("IsGpsModified".to_string(), "true".to_string());
+                } else {
+                    exif_map.insert("HasNativeGPS".to_string(), "false".to_string());
                 }
 
                 crate::exif_processing::save_exif_to_rrcache(&source_path, exif_map.clone());
                 metadata.exif = Some(exif_map);
+                metadata.last_modified = Some(chrono::Utc::now().to_rfc3339());
             }
-        } else if let Some(ref mut exif_map) = metadata.exif {
+        } else {
             exif_map.remove("GPSLatitude");
             exif_map.remove("GPSLatitudeRef");
             exif_map.remove("GPSLongitude");
             exif_map.remove("GPSLongitudeRef");
-            exif_map.remove("IsGpsModified");
+            if has_native {
+                exif_map.insert("IsGpsModified".to_string(), "true".to_string());
+            } else {
+                exif_map.remove("IsGpsModified");
+                exif_map.remove("HasNativeGPS");
+            }
             crate::exif_processing::save_exif_to_rrcache(&source_path, exif_map.clone());
+            metadata.exif = Some(exif_map);
+            metadata.last_modified = Some(chrono::Utc::now().to_rfc3339());
         }
 
         if let Ok(json_string) = serde_json::to_string_pretty(&metadata) {
@@ -3195,6 +3358,23 @@ pub fn set_gps_for_paths(
         if enable_xmp_sync {
             sync_metadata_to_xmp(&source_path, &metadata, create_xmp_if_missing);
         }
+
+        let is_raw = crate::formats::is_raw_file(&source_path);
+        let tm_override = crate::image_processing::resolve_tonemapper_override(&settings, is_raw);
+        let is_adj_edited = crate::image_processing::is_image_edited(&metadata.adjustments, is_raw, tm_override);
+        let is_gps_edited = metadata.exif.as_ref().map(|emap| {
+            emap.get("IsGpsModified").map(|v| v == "true").unwrap_or(false)
+        }).unwrap_or(false);
+        let is_edited = is_adj_edited || is_gps_edited;
+
+        emit_image_metadata_loaded(
+            &app_handle,
+            path,
+            metadata.rating,
+            metadata.flag,
+            is_edited,
+            &metadata.tags,
+        );
     });
 
     Ok(())
@@ -3216,31 +3396,7 @@ pub fn revert_gps_for_paths(
             let mut metadata =
                 crate::exif_processing::load_sidecar_with_exif(&sidecar_path, &source_path);
 
-            let native_opt = extract_native_gps(&source_path);
-            let ret = if let Some((lat_val, lon_val, lat_str, lat_ref, lon_str, lon_ref)) = native_opt {
-                let mut exif_map = metadata.exif.unwrap_or_default();
-                exif_map.insert("GPSLatitude".to_string(), lat_str);
-                exif_map.insert("GPSLatitudeRef".to_string(), lat_ref);
-                exif_map.insert("GPSLongitude".to_string(), lon_str);
-                exif_map.insert("GPSLongitudeRef".to_string(), lon_ref);
-                exif_map.insert("HasNativeGPS".to_string(), "true".to_string());
-                exif_map.remove("IsGpsModified");
-
-                crate::exif_processing::save_exif_to_rrcache(&source_path, exif_map.clone());
-                metadata.exif = Some(exif_map);
-                Some((lat_val, lon_val))
-            } else {
-                if let Some(ref mut exif_map) = metadata.exif {
-                    exif_map.remove("GPSLatitude");
-                    exif_map.remove("GPSLatitudeRef");
-                    exif_map.remove("GPSLongitude");
-                    exif_map.remove("GPSLongitudeRef");
-                    exif_map.remove("IsGpsModified");
-                    exif_map.remove("HasNativeGPS");
-                    crate::exif_processing::save_exif_to_rrcache(&source_path, exif_map.clone());
-                }
-                None
-            };
+            let ret = revert_gps_in_metadata_and_cache(&source_path, &mut metadata);
 
             if let Ok(json_string) = serde_json::to_string_pretty(&metadata) {
                 let _ = std::fs::write(&sidecar_path, json_string);
@@ -3249,6 +3405,19 @@ pub fn revert_gps_for_paths(
             if enable_xmp_sync {
                 sync_metadata_to_xmp(&source_path, &metadata, create_xmp_if_missing);
             }
+
+            let is_raw = crate::formats::is_raw_file(&source_path);
+            let tm_override = crate::image_processing::resolve_tonemapper_override(&settings, is_raw);
+            let is_adj_edited = crate::image_processing::is_image_edited(&metadata.adjustments, is_raw, tm_override);
+
+            emit_image_metadata_loaded(
+                &app_handle,
+                path,
+                metadata.rating,
+                metadata.flag,
+                is_adj_edited,
+                &metadata.tags,
+            );
 
             (path.clone(), ret)
         })
@@ -4331,20 +4500,54 @@ pub fn resolve_xmp_path(image_path: &Path) -> Option<PathBuf> {
     }
 }
 
-fn parse_gps_components(coord: &str) -> Option<(u32, f64, f64)> {
+pub fn parse_gps_components(coord: &str) -> Option<(u32, f64, f64)> {
     let trimmed = coord.trim();
-    let re = regex!(
-        r#"(\d+)\s*(?:deg|°)\s*(\d+(?:\.\d+)?)\s*(?:min|'|’|′)\s*(\d+(?:\.\d+)?)\s*(?:sec|"|”|″)?"#
+
+    // 1. Deg / Min / Sec format (e.g. "45 deg 27 min 51.12 sec" or "45° 27' 51.12\"") or Deg / Min format (e.g. "45 deg 27.852 min")
+    let re_dms = regex!(
+        r#"(\d+)\s*(?:deg|°)\s*(\d+(?:\.\d+)?)\s*(?:min|'|’|′)(?:\s*(\d+(?:\.\d+)?)\s*(?:sec|"|”|″)?)?"#
     );
-    if let Some(caps) = re.captures(trimmed) {
+    if let Some(caps) = re_dms.captures(trimmed) {
         let deg: u32 = caps.get(1)?.as_str().parse().ok()?;
-        let min: f64 = caps.get(2)?.as_str().parse().ok()?;
-        let sec: f64 = caps
-            .get(3)
-            .map(|m| m.as_str().parse().unwrap_or(0.0))
-            .unwrap_or(0.0);
-        return Some((deg, min, sec));
+        let min_raw: f64 = caps.get(2)?.as_str().parse().ok()?;
+        if let Some(sec_match) = caps.get(3) {
+            let sec: f64 = sec_match.as_str().parse().unwrap_or(0.0);
+            return Some((deg, min_raw, sec));
+        } else {
+            let min = min_raw.floor();
+            let sec = (min_raw - min) * 60.0;
+            return Some((deg, min, sec));
+        }
     }
+
+    // 2. Comma-separated parts (e.g. "45, 27, 51.12" or rational fractions "45/1, 27/1, 5112/100")
+    let comma_parts: Vec<&str> = trimmed.split(',').map(|s| s.trim()).collect();
+    let parse_frac = |s: &str| -> Option<f64> {
+        if let Some((n, d)) = s.split_once('/') {
+            let num: f64 = n.trim().parse().ok()?;
+            let den: f64 = d.trim().parse().ok()?;
+            if den != 0.0 { Some(num / den) } else { None }
+        } else {
+            s.parse().ok()
+        }
+    };
+    if comma_parts.len() == 3 {
+        if let (Some(d), Some(m), Some(s)) = (
+            parse_frac(comma_parts[0]),
+            parse_frac(comma_parts[1]),
+            parse_frac(comma_parts[2]),
+        ) {
+            return Some((d as u32, m, s));
+        }
+    } else if comma_parts.len() == 2 {
+        if let (Some(d), Some(m)) = (parse_frac(comma_parts[0]), parse_frac(comma_parts[1])) {
+            let min = m.floor();
+            let sec = (m - min) * 60.0;
+            return Some((d as u32, min, sec));
+        }
+    }
+
+    // 3. Decimal degrees float
     if let Ok(val) = trimmed.parse::<f64>() {
         let abs_val = val.abs();
         let deg = abs_val.floor() as u32;
