@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@source not "../src-tauri";
+@import 'tailwindcss' source('.');
+@source '../index.html';
 @import 'leaflet/dist/leaflet.css';
 @import 'leaflet.markercluster/dist/MarkerCluster.css';
 @import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
