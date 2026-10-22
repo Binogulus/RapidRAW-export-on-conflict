@@ -95,7 +95,7 @@ Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos
 
 #### 3. Unlocated Photos Dock & Drag-and-Drop Geotagging
 <p align="center">
-  <<img width="2313" height="1253" alt="Screenshot from 2026-10-21 11-28-17" src="https://github.com/user-attachments/assets/66d38f48-17a3-42cf-8d9b-9a9b70abb0a3" />
+  <img width="2313" height="1253" alt="Screenshot from 2026-10-21 11-28-17" src="https://github.com/user-attachments/assets/66d38f48-17a3-42cf-8d9b-9a9b70abb0a3" />
 </p>
 <p align="center"><em>Collapsible, resizable Unlocated dock with Culling-style thumbnail cards and precision single or multi-photo drag-and-drop placement onto the map.</em></p>
 
