@@ -5,9 +5,6 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-// Like println!/eprintln!, but ignores write errors: when stdout/stderr is a
-// closed pipe (e.g. `RapidRAW export ... | head`), println! panics, which
-// left headless exports hanging.
 macro_rules! cli_println {
     ($($arg:tt)*) => {{
         use std::io::Write as _;
@@ -25,12 +22,14 @@ macro_rules! cli_eprintln {
 mod adjustment_utils;
 mod ai_commands;
 mod ai_connector;
+mod ai_denoise;
 mod ai_processing;
 mod android_integration;
 mod app_settings;
 mod app_state;
 mod apple_raw;
 mod as_shot;
+mod auto_straighten;
 mod baseline_exposure;
 mod cache_utils;
 mod camera_tethering;
@@ -58,6 +57,7 @@ mod multi_exposure;
 mod negative_conversion;
 mod panorama_stitching;
 mod panorama_utils;
+mod portable_paths;
 mod preset_converter;
 mod raw_processing;
 mod relight;
@@ -341,14 +341,19 @@ fn compute_patched_and_warped(
             .get("aiPatches")
             .and_then(|v| v.as_array())
             .is_some_and(|a| !a.is_empty());
+        let denoised = crate::ai_denoise::apply_ai_denoise(
+            &loaded_image.image,
+            &loaded_image.path,
+            adjustments,
+        );
 
-        if has_patches {
-            Ok(Arc::new(
-                composite_patches_on_image(&loaded_image.image, adjustments)
+        match (denoised, has_patches) {
+            (base, true) => Ok(Arc::new(
+                composite_patches_on_image(&base, adjustments)
                     .map_err(|e| format!("Failed to composite AI patches: {}", e))?,
-            ))
-        } else {
-            Ok(Arc::clone(&loaded_image.image))
+            )),
+            (Cow::Owned(img), false) => Ok(Arc::new(img)),
+            (Cow::Borrowed(_), false) => Ok(Arc::clone(&loaded_image.image)),
         }
     })?;
 
@@ -514,6 +519,8 @@ fn process_preview_job(
         .ok_or("No original image loaded")?
         .clone();
     drop(loaded_image_guard);
+
+    crate::ai_denoise::ensure_generated(app_handle, &loaded_image, &adjustments_clone);
 
     let new_transform_hash = calculate_transform_hash(&adjustments_clone);
     let settings = load_settings(app_handle.clone()).unwrap_or_default();
@@ -936,13 +943,18 @@ async fn generate_uncropped_preview(
                     .get("aiPatches")
                     .and_then(|v| v.as_array())
                     .is_some_and(|a| !a.is_empty());
+                let denoised = crate::ai_denoise::apply_ai_denoise(
+                    &loaded_image.image,
+                    &loaded_image.path,
+                    &adjustments_clone,
+                );
                 let patched_image = if has_patches {
                     Cow::Owned(
-                        composite_patches_on_image(&loaded_image.image, &adjustments_clone)
-                            .unwrap_or_else(|_| loaded_image.image.as_ref().clone()),
+                        composite_patches_on_image(&denoised, &adjustments_clone)
+                            .unwrap_or_else(|_| denoised.as_ref().clone()),
                     )
                 } else {
-                    Cow::Borrowed(loaded_image.image.as_ref())
+                    denoised
                 };
 
                 let relit_image = crate::relight::apply_relight(patched_image, &adjustments_clone);
@@ -1591,7 +1603,7 @@ async fn generate_preview_for_path(
 }
 
 fn setup_logging(app_handle: &tauri::AppHandle) {
-    let log_dir = match app_handle.path().app_log_dir() {
+    let log_dir = match crate::portable_paths::app_log_dir(app_handle) {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("Failed to get app log directory: {}", e);
@@ -1625,8 +1637,6 @@ fn setup_logging(app_handle: &tauri::AppHandle) {
             ))
         })
         .level(level)
-        // fern panics when a stderr write fails (e.g. output piped into `head`),
-        // and the panic hook below logs again, which aborts the process.
         .chain(fern::Output::call(|record| {
             let _ = writeln!(std::io::stderr(), "{}", record.args());
         }));
@@ -1667,7 +1677,7 @@ fn setup_logging(app_handle: &tauri::AppHandle) {
 
 #[tauri::command]
 fn get_log_file_path(app_handle: tauri::AppHandle) -> Result<String, String> {
-    let log_dir = app_handle.path().app_log_dir().map_err(|e| e.to_string())?;
+    let log_dir = crate::portable_paths::app_log_dir(&app_handle)?;
     let log_file_path = log_dir.join("app.log");
     Ok(log_file_path.to_string_lossy().to_string())
 }
@@ -1789,7 +1799,7 @@ fn frontend_ready(
         let _ = (&app_handle, is_first_run);
 
         #[cfg(any(windows, target_os = "linux"))]
-        if is_first_run && let Ok(config_dir) = app_handle.path().app_config_dir() {
+        if is_first_run && let Ok(config_dir) = crate::portable_paths::app_config_dir(&app_handle) {
             let path = config_dir.join("window_state.json");
 
             if let Ok(contents) = std::fs::read_to_string(&path)
@@ -1836,6 +1846,8 @@ fn frontend_ready(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let portable_dir = crate::portable_paths::init_portable_mode();
+
     let _ = rayon::ThreadPoolBuilder::new()
         .stack_size(8 * 1024 * 1024)
         .build_global();
@@ -1949,7 +1961,11 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
 
-            if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
+            if let Ok(cache_dir) = crate::portable_paths::app_cache_dir(&app_handle) {
+                let thumb_dir = cache_dir.join("thumbnails");
+                let _ = std::fs::create_dir_all(&thumb_dir);
+                let _ = app_handle.asset_protocol_scope().allow_directory(&thumb_dir, true);
+                crate::ai_denoise::initialize_cache_dir(cache_dir.clone());
                 crate::exif_processing::initialize_cache_dir(cache_dir);
             }
 
@@ -1962,7 +1978,7 @@ pub fn run() {
                 });
             }
 
-            let config_dir = app_handle.path().app_config_dir().expect("Failed to get config dir");
+            let config_dir = crate::portable_paths::app_config_dir(&app_handle).expect("Failed to get config dir");
             let crash_flag_path = config_dir.join(".gpu_init_crash_flag");
 
             {
@@ -2030,6 +2046,9 @@ pub fn run() {
             }
 
             setup_logging(&app_handle);
+            if let Some(ref p_dir) = portable_dir {
+                log::info!("Portable mode active! Base directory: {:?}", p_dir);
+            }
 
             if let Some(backend) = &settings.processing_backend
                 && backend != "auto" {
@@ -2120,7 +2139,7 @@ pub fn run() {
                 let mut initial_normal_rect = (default_w, default_h, 100i32, 100i32);
                 let mut state_loaded = false;
 
-                if let Ok(config_dir) = app.path().app_config_dir() {
+                if let Ok(config_dir) = crate::portable_paths::app_config_dir(app.handle()) {
                     let path = config_dir.join("window_state.json");
                     if let Ok(contents) = std::fs::read_to_string(&path)
                         && let Ok(state) = serde_json::from_str::<WindowState>(&contents)
@@ -2191,7 +2210,7 @@ pub fn run() {
                         };
 
                         if let Some(state) = state_to_save
-                            && let Ok(config_dir) = app_handle_for_saver.path().app_config_dir()
+                            && let Ok(config_dir) = crate::portable_paths::app_config_dir(&app_handle_for_saver)
                         {
                             let path = config_dir.join("window_state.json");
                             let _ = std::fs::create_dir_all(&config_dir);
@@ -2354,6 +2373,8 @@ pub fn run() {
             ai_commands::test_ai_connector_connection,
             ai_commands::generate_full_image_depth_map,
             ai_commands::generate_relight_normal_map,
+            ai_denoise::get_ai_denoise_cache_size,
+            ai_denoise::clear_ai_denoise_cache,
             ai_commands::cancel_ai_task,
             apple_raw::is_raw9_available,
             inpainting::invoke_generative_replace_with_mask_def,
@@ -2374,6 +2395,8 @@ pub fn run() {
             export_processing::estimate_export_sizes,
             image_processing::calculate_auto_adjustments,
             image_processing::sample_white_balance,
+            auto_straighten::calculate_auto_straighten,
+            file_management::apply_auto_straighten_to_paths,
             mask_generation::generate_mask_overlay,
             file_management::update_exif_fields,
             file_management::get_supported_file_types,
@@ -2413,6 +2436,8 @@ pub fn run() {
             file_management::set_color_label_for_paths,
             file_management::set_rating_for_paths,
             file_management::set_flag_for_paths,
+            file_management::set_gps_for_paths,
+            file_management::revert_gps_for_paths,
             file_management::import_files,
             file_management::create_virtual_copy,
             file_management::get_albums,

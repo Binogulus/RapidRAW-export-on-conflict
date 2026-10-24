@@ -15,17 +15,18 @@ jobs:
       matrix:
         platform:
           - name: 'Linux (AppImage & DEB)'
-            os: 'ubuntu-22.04'
+            os: 'ubuntu-24.04'
             artifact-name: 'RapidRAW-Linux-x86_64'
             artifact-path: |
               src-tauri/target/release/bundle/**/*.AppImage
               src-tauri/target/release/bundle/**/*.deb
-          - name: 'Windows 11 (x64 Installer)'
+          - name: 'Windows 11 (x64 Installer & Portable)'
             os: 'windows-latest'
             artifact-name: 'RapidRAW-Windows-x64'
             artifact-path: |
               src-tauri/target/release/bundle/**/*.exe
               src-tauri/target/release/bundle/**/*.msi
+              src-tauri/target/release/bundle/portable/*.zip
           - name: 'macOS (Apple Silicon DMG)'
             os: 'macos-latest'
             artifact-name: 'RapidRAW-macOS-AppleSilicon'
@@ -78,6 +79,31 @@ jobs:
           NO_STRIP: ${{ startsWith(matrix.platform.os, 'ubuntu') }}
         with:
           args: --verbose
+
+      - name: Package Windows True Portable ZIP
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $portableRoot = "src-tauri/target/release/bundle/portable"
+          $appDir = "$portableRoot/RapidRAW-Portable"
+
+          New-Item -ItemType Directory -Force -Path $appDir | Out-Null
+          New-Item -ItemType Directory -Force -Path "$appDir/portable_data" | Out-Null
+          Set-Content -Path "$appDir/portable.txt" -Value "RapidRAW True Portable Mode enabled. All settings, cache, database, LUTs, AI models, and WebView2 data are stored in ./portable_data/"
+
+          Copy-Item "src-tauri/target/release/RapidRAW.exe" -Destination "$appDir/"
+          Get-ChildItem "src-tauri/target/release/*.dll" -ErrorAction SilentlyContinue | ForEach-Object {
+            Copy-Item $_.FullName -Destination "$appDir/"
+          }
+          Copy-Item "src-tauri/resources" -Destination "$appDir/resources" -Recurse -Force
+          Copy-Item "src-tauri/lensfun_db" -Destination "$appDir/lensfun_db" -Recurse -Force
+
+          $zipPath = "$portableRoot/RapidRAW_v${version}_windows_x64_Portable.zip"
+          Compress-Archive -Path "$appDir/*" -DestinationPath $zipPath -Force
+          Remove-Item -Recurse -Force $appDir
+          Write-Host "Created portable archive: $zipPath"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

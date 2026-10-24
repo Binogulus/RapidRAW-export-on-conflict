@@ -38,6 +38,13 @@ export const isUniqueFilenameTemplate = (template: string): boolean =>
 
 export type TiffBitDepth = 8 | 16;
 
+export enum ConflictAction {
+  CreateUnique = 'createUnique',
+  Overwrite = 'overwrite',
+  OverwriteIfChanged = 'overwriteIfChanged',
+  Skip = 'skip',
+}
+
 export const DEFAULT_EXPORT_DPI = 300;
 export const MAX_EXPORT_DPI = 65535;
 
@@ -69,6 +76,7 @@ export interface ExportSettings {
   preserveFolders?: boolean;
   destinationType?: string;
   subfolder?: string;
+  onConflict?: ConflictAction;
   dpi?: number;
 }
 
@@ -102,6 +110,9 @@ export interface ExportState {
   errorMessage: string;
   progress: Progress;
   status: Status;
+  exportedCount?: number;
+  skippedCount?: number;
+  totalCount?: number;
 }
 
 export interface FileFormat {
@@ -162,4 +173,5 @@ export interface ExportPreset {
   lastExportPath?: string;
   destinationType?: string;
   subfolder?: string;
+  onConflict?: ConflictAction;
 }

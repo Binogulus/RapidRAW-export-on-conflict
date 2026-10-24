@@ -7,6 +7,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use crate::app_state::AppState;
+use crate::export_processing::ConflictAction;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +121,8 @@ pub fn all_available_adjustments() -> HashSet<String> {
         "sharpness",
         "sharpnessThreshold",
         "centré",
+        "centréX",
+        "centréY",
         "lumaNoiseReduction",
         "colorNoiseReduction",
         "chromaticAberrationRedCyan",
@@ -128,6 +131,8 @@ pub fn all_available_adjustments() -> HashSet<String> {
         "vignetteFeather",
         "vignetteMidpoint",
         "vignetteRoundness",
+        "vignetteCenterX",
+        "vignetteCenterY",
         "grainAmount",
         "grainRoughness",
         "grainSize",
@@ -284,6 +289,8 @@ pub struct ExportPreset {
     pub tiff_bit_depth: Option<u8>,
     #[serde(default)]
     pub preserve_timestamps: Option<bool>,
+    #[serde(default)]
+    pub on_conflict: Option<ConflictAction>,
 }
 
 pub fn default_export_presets() -> Vec<ExportPreset> {
@@ -322,6 +329,7 @@ pub fn default_export_presets() -> Vec<ExportPreset> {
             subfolder: Some("".to_string()),
             tiff_bit_depth: Some(16),
             preserve_timestamps: Some(false),
+            on_conflict: Some(ConflictAction::CreateUnique),
         },
         ExportPreset {
             id: "default-fast".to_string(),
@@ -357,6 +365,7 @@ pub fn default_export_presets() -> Vec<ExportPreset> {
             subfolder: Some("".to_string()),
             tiff_bit_depth: Some(16),
             preserve_timestamps: Some(false),
+            on_conflict: Some(ConflictAction::CreateUnique),
         },
     ]
 }
@@ -724,10 +733,7 @@ impl Default for AppSettings {
 }
 
 pub fn get_settings_path(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let settings_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let settings_dir = crate::portable_paths::app_data_dir(app_handle)?;
 
     if !settings_dir.exists() {
         fs::create_dir_all(&settings_dir).map_err(|e| e.to_string())?;
