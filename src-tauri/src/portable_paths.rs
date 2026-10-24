@@ -64,7 +64,10 @@ pub fn app_config_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
         let _ = fs::create_dir_all(&dir);
         return Ok(dir);
     }
-    app_handle.path().app_config_dir().map_err(|e| e.to_string())
+    app_handle
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())
 }
 
 pub fn app_cache_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {

@@ -42,10 +42,7 @@ export function parseGpsCoordinate(coordStr: string): number | null {
   return null;
 }
 
-export function getImageGps(
-  image: ImageFile,
-  overrideExif?: Record<string, string>,
-): GeoLocation | null {
+export function getImageGps(image: ImageFile, overrideExif?: Record<string, string>): GeoLocation | null {
   const exif = overrideExif !== undefined ? overrideExif : image.exif;
   if (!exif) return null;
 
@@ -81,10 +78,7 @@ export function getImageGps(
   return { lat, lon };
 }
 
-export function getImageTimestamp(
-  image: ImageFile,
-  overrideExif?: Record<string, string>,
-): string | null {
+export function getImageTimestamp(image: ImageFile, overrideExif?: Record<string, string>): string | null {
   const exif = overrideExif !== undefined ? overrideExif : image.exif;
   if (exif) {
     const dt = exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate || exif.DateTime;

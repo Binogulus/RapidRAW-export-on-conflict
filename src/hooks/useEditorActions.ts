@@ -284,8 +284,7 @@ export function useEditorActions() {
                 const norm = normalizePath(img.path);
                 if (!targetsSet.has(norm)) return img;
 
-                const coords =
-                  revertedGpsMap[img.path] !== undefined ? revertedGpsMap[img.path] : revertedGpsMap[norm];
+                const coords = revertedGpsMap[img.path] !== undefined ? revertedGpsMap[img.path] : revertedGpsMap[norm];
                 const currentExif = img.exif ? { ...img.exif } : {};
                 delete currentExif.IsGpsModified;
 
