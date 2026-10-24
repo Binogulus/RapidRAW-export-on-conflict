@@ -336,11 +336,7 @@ function createClusterThumbnailPin(
   isSelected: boolean = false,
 ): L.DivIcon {
   const countLabel =
-    activeIndex !== undefined
-      ? `${activeIndex + 1}/${count}`
-      : count > 999
-        ? '999+'
-        : count.toString();
+    activeIndex !== undefined ? `${activeIndex + 1}/${count}` : count > 999 ? '999+' : count.toString();
 
   const borderColor = isSelected ? '#38bdf8' : '#0284c7';
   const glow = isSelected
@@ -460,11 +456,7 @@ function createClusterLoadingPin(
   isSelected: boolean = false,
 ): L.DivIcon {
   const countLabel =
-    activeIndex !== undefined
-      ? `${activeIndex + 1}/${count}`
-      : count > 999
-        ? '999+'
-        : count.toString();
+    activeIndex !== undefined ? `${activeIndex + 1}/${count}` : count > 999 ? '999+' : count.toString();
 
   const borderColor = isSelected ? '#38bdf8' : '#0284c7';
   const glow = isSelected
@@ -641,10 +633,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
   const mediumThumbnails = useProcessStore((s) => s.mediumThumbnails);
   const { t } = useTranslation();
 
-  const selectedPathsSet = useMemo(
-    () => new Set(multiSelectedPaths || []),
-    [multiSelectedPaths],
-  );
+  const selectedPathsSet = useMemo(() => new Set(multiSelectedPaths || []), [multiSelectedPaths]);
   const selectedPathsSetRef = useRef<Set<string>>(selectedPathsSet);
   useEffect(() => {
     selectedPathsSetRef.current = selectedPathsSet;
@@ -679,9 +668,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         if (typeof (targetMarker as any).setZIndexOffset === 'function') {
           targetMarker.setZIndexOffset(100000);
         }
-        const el = targetMarker.getElement
-          ? targetMarker.getElement()
-          : (targetMarker as any)._icon;
+        const el = targetMarker.getElement ? targetMarker.getElement() : (targetMarker as any)._icon;
         if (el) {
           el.style.zIndex = '100000';
           el.classList.add('elevated-map-marker');
@@ -785,9 +772,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         const clusterMarker = clusterId !== null ? clustersMapRef.current.get(clusterId) : null;
         if (clusterMarker) {
           const childMarkers = clusterMarker.getAllChildMarkers();
-          const childPhotos = childMarkers
-            .map((m: any) => m.photoPath as string)
-            .filter(Boolean);
+          const childPhotos = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
           let activeIdx = (clusterMarker as any)._activePhotoIndex ?? 0;
           if (activeIdx < 0 || activeIdx >= childPhotos.length) activeIdx = 0;
           return childPhotos[activeIdx] || childPhotos[0] || null;
@@ -811,9 +796,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       const childMarkers = clusterMarker.getAllChildMarkers();
       if (!childMarkers || childMarkers.length <= 1) return;
 
-      const childPhotos: string[] = childMarkers
-        .map((m: any) => m.photoPath as string)
-        .filter(Boolean);
+      const childPhotos: string[] = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
 
       if (childPhotos.length <= 1) return;
 
@@ -894,9 +877,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         const clusterMarker = clusterId !== null ? clustersMapRef.current.get(clusterId) : null;
         if (clusterMarker) {
           const childMarkers = clusterMarker.getAllChildMarkers();
-          const childPhotos: string[] = childMarkers
-            .map((m: any) => m.photoPath as string)
-            .filter(Boolean);
+          const childPhotos: string[] = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
 
           if (childPhotos.length > 1) {
             const stackNum = Number(stackCard.getAttribute('data-stack-card') || '1');
@@ -950,12 +931,10 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       const photoToDrag = targetPhotoPath;
       const isPhotoSelected = selectedPathsSetRef.current.has(photoToDrag);
       const currentMulti = multiSelectedPathsRef.current;
-      const pathsToMove =
-        isPhotoSelected && currentMulti.length > 1 ? currentMulti : [photoToDrag];
+      const pathsToMove = isPhotoSelected && currentMulti.length > 1 ? currentMulti : [photoToDrag];
 
       // Measure card bounds so the dragged avatar maintains exact cursor-to-thumbnail position
-      const cardEl = (pinEl.querySelector('[data-front-card="true"]') ||
-        pinEl.firstElementChild) as HTMLElement | null;
+      const cardEl = (pinEl.querySelector('[data-front-card="true"]') || pinEl.firstElementChild) as HTMLElement | null;
       const cardRect = cardEl ? cardEl.getBoundingClientRect() : pinEl.getBoundingClientRect();
       const grabOffsetX = e.clientX - cardRect.left;
       const grabOffsetY = e.clientY - cardRect.top;
@@ -1187,10 +1166,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
 
     const handleMapClick = (e: L.LeafletMouseEvent) => {
       if (repositioningPathRef.current && onRepositionSelectRef.current) {
-        onRepositionSelectRef.current(
-          e.latlng.lat,
-          ((((e.latlng.lng + 180) % 360) + 360) % 360) - 180,
-        );
+        onRepositionSelectRef.current(e.latlng.lat, ((((e.latlng.lng + 180) % 360) + 360) % 360) - 180);
       }
     };
 
@@ -1219,9 +1195,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         clustersMapRef.current.set(clusterId, c);
 
         const childMarkers = c.getAllChildMarkers();
-        const childPaths = childMarkers
-          .map((m: any) => m.photoPath as string)
-          .filter(Boolean);
+        const childPaths = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
 
         let activeIdx = (c as any)._activePhotoIndex;
         if (activeIdx === undefined || activeIdx >= childPaths.length || activeIdx < 0) {
@@ -1415,10 +1389,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       } else {
         (marker as any).photoPath = photo.path;
         const curLatLng = marker.getLatLng();
-        if (
-          Math.abs(curLatLng.lat - photo.lat) > 1e-6 ||
-          Math.abs(curLatLng.lng - photo.lon) > 1e-6
-        ) {
+        if (Math.abs(curLatLng.lat - photo.lat) > 1e-6 || Math.abs(curLatLng.lng - photo.lon) > 1e-6) {
           markersToReposition.push(marker);
         }
       }
@@ -1540,14 +1511,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         });
       }
     }
-  }, [
-    thumbnails,
-    mediumThumbnails,
-    showThumbnailCards,
-    photos,
-    selectedPath,
-    cluster,
-  ]);
+  }, [thumbnails, mediumThumbnails, showThumbnailCards, photos, selectedPath, cluster]);
 
   // Toggle between Compact Pins and Thumbnail Cards without rebuilding cluster
   useEffect(() => {
@@ -1664,9 +1628,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
       if (visibleParent && visibleParent !== marker) {
         const clusterObj = visibleParent as L.MarkerCluster;
         const childMarkers = clusterObj.getAllChildMarkers();
-        const childPaths = childMarkers
-          .map((m: any) => m.photoPath as string)
-          .filter(Boolean);
+        const childPaths = childMarkers.map((m: any) => m.photoPath as string).filter(Boolean);
         const idx = childPaths.indexOf(photo.path);
         if (idx !== -1) {
           (clusterObj as any)._activePhotoIndex = idx;
@@ -1684,15 +1646,7 @@ const PhotoClusterLayer: React.FC<PhotoClusterLayerProps> = ({
         }
       }
     }
-  }, [
-    multiSelectedPaths,
-    selectedPath,
-    photos,
-    map,
-    showThumbnailCards,
-    cluster,
-    elevateMarker,
-  ]);
+  }, [multiSelectedPaths, selectedPath, photos, map, showThumbnailCards, cluster, elevateMarker]);
 
   return null;
 };
@@ -1727,9 +1681,7 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
     onDragEnd,
     onRequestThumb,
   }) => {
-    const thumbUrl = useProcessStore(
-      (s) => s.mediumThumbnails[photo.path] || s.thumbnails[photo.path],
-    );
+    const thumbUrl = useProcessStore((s) => s.mediumThumbnails[photo.path] || s.thumbnails[photo.path]);
 
     useEffect(() => {
       if (!thumbUrl) {
@@ -1742,11 +1694,7 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
       let fNum = e.FNumber ? String(e.FNumber) : '';
       if (fNum && !fNum.toLowerCase().startsWith('f')) fNum = `f/${fNum}`;
       const focalVal = e.FocalLengthIn35mmFilm || e.FocalLength || '';
-      const focalStr = focalVal
-        ? String(focalVal).endsWith('mm')
-          ? String(focalVal)
-          : `${focalVal}mm`
-        : '';
+      const focalStr = focalVal ? (String(focalVal).endsWith('mm') ? String(focalVal) : `${focalVal}mm`) : '';
       return {
         shutter: e.ExposureTime || '',
         fNumber: fNum,
@@ -1805,39 +1753,29 @@ const UnlocatedPhotoCard: React.FC<UnlocatedPhotoCardProps> = React.memo(
                 {shutter && (
                   <div className="flex items-center gap-1">
                     <IconShutter className="w-2.5 h-2.5 text-text-secondary shrink-0" />
-                    <span className="text-[9px] font-medium tracking-wide text-text-primary">
-                      {shutter}
-                    </span>
+                    <span className="text-[9px] font-medium tracking-wide text-text-primary">{shutter}</span>
                   </div>
                 )}
                 {fNumber && (
                   <div className="flex items-center gap-1">
                     <IconAperture className="w-2.5 h-2.5 text-text-secondary shrink-0" />
-                    <span className="text-[9px] font-medium tracking-wide text-text-primary">
-                      {fNumber}
-                    </span>
+                    <span className="text-[9px] font-medium tracking-wide text-text-primary">{fNumber}</span>
                   </div>
                 )}
                 {iso && (
                   <div className="flex items-center gap-1">
                     <IconIso className="w-2.5 h-2.5 text-text-secondary shrink-0" />
-                    <span className="text-[9px] font-medium tracking-wide text-text-primary">
-                      {iso}
-                    </span>
+                    <span className="text-[9px] font-medium tracking-wide text-text-primary">{iso}</span>
                   </div>
                 )}
                 {focal && (
                   <div className="flex items-center gap-1">
                     <IconFocalLength className="w-2.5 h-2.5 text-text-secondary shrink-0" />
-                    <span className="text-[9px] font-medium tracking-wide text-text-primary">
-                      {focal}
-                    </span>
+                    <span className="text-[9px] font-medium tracking-wide text-text-primary">{focal}</span>
                   </div>
                 )}
                 {!shutter && !fNumber && !iso && !focal && timestamp && (
-                  <span className="text-[9px] font-medium tracking-wide text-text-secondary">
-                    {timestamp}
-                  </span>
+                  <span className="text-[9px] font-medium tracking-wide text-text-secondary">{timestamp}</span>
                 )}
               </div>
             </div>
@@ -1877,8 +1815,7 @@ const UnlocatedDockRow = React.memo((props: any) => {
   if (!photo) return null;
 
   const isSelected =
-    selectedDockPaths.has(photo.path) ||
-    (selectedDockPaths.size === 0 && effectiveSelectedPath === photo.path);
+    selectedDockPaths.has(photo.path) || (selectedDockPaths.size === 0 && effectiveSelectedPath === photo.path);
   const filename = photo.path.split(/[\\/]/).pop() || '';
   const timestamp = getImageTimestamp(photo, localExifMap[photo.path]);
   const exif = localExifMap[photo.path] || photo.exif;
@@ -2313,10 +2250,9 @@ export default function MapView(props: MapViewProps) {
         if (isCancelled) break;
         const chunk = unrequested.slice(i, i + chunkSize).map((img) => img.path);
         try {
-          const chunkExif = await invoke<Record<string, Record<string, string>>>(
-            Invokes.ReadExifForPaths,
-            { paths: chunk },
-          );
+          const chunkExif = await invoke<Record<string, Record<string, string>>>(Invokes.ReadExifForPaths, {
+            paths: chunk,
+          });
           if (isCancelled) break;
 
           setLocalExifMap((prev) => ({ ...prev, ...chunkExif }));
@@ -2343,12 +2279,8 @@ export default function MapView(props: MapViewProps) {
       if (gps) {
         const filename = img.path.split(/[\\/]/).pop() || '';
         const timestamp = getImageTimestamp(img, exifOverride);
-        const hasNative =
-          exifOverride?.HasNativeGPS === 'true' ||
-          img.exif?.HasNativeGPS === 'true';
-        const isModified =
-          exifOverride?.IsGpsModified === 'true' ||
-          img.exif?.IsGpsModified === 'true';
+        const hasNative = exifOverride?.HasNativeGPS === 'true' || img.exif?.HasNativeGPS === 'true';
+        const isModified = exifOverride?.IsGpsModified === 'true' || img.exif?.IsGpsModified === 'true';
 
         items.push({
           id: img.path,
@@ -2391,9 +2323,7 @@ export default function MapView(props: MapViewProps) {
         for (const p of paths) {
           const img = imageList.find((i) => i.path === p);
           const currentGps = getImageGps(img, localExifMap[p]);
-          const hadNative =
-            localExifMap[p]?.HasNativeGPS === 'true' ||
-            img?.exif?.HasNativeGPS === 'true';
+          const hadNative = localExifMap[p]?.HasNativeGPS === 'true' || img?.exif?.HasNativeGPS === 'true';
           undoItems.push({
             path: p,
             previousLat: currentGps ? currentGps.lat : null,
@@ -2429,9 +2359,7 @@ export default function MapView(props: MapViewProps) {
               const hasNative =
                 currentExif.HasNativeGPS === 'true' ||
                 imageList.find((i) => i.path === p)?.exif?.HasNativeGPS === 'true';
-              const modUpdate: Record<string, string> = hasNative
-                ? { IsGpsModified: 'true' }
-                : {};
+              const modUpdate: Record<string, string> = hasNative ? { IsGpsModified: 'true' } : {};
               next[p] = { ...currentExif, ...updates, ...modUpdate };
             } else if (next[p]) {
               const cleaned = { ...next[p] };
@@ -2460,9 +2388,7 @@ export default function MapView(props: MapViewProps) {
           imageList: state.imageList.map((img) => {
             if (pathsNormSet.has(normalizePath(img.path))) {
               if (lat !== null && lon !== null) {
-                const hasNative =
-                  img.exif?.HasNativeGPS === 'true' ||
-                  localExifMap[img.path]?.HasNativeGPS === 'true';
+                const hasNative = img.exif?.HasNativeGPS === 'true' || localExifMap[img.path]?.HasNativeGPS === 'true';
                 const modUpdate = hasNative ? { IsGpsModified: 'true' } : {};
                 return { ...img, is_edited: true, exif: { ...(img.exif || {}), ...updates, ...modUpdate } };
               } else if (img.exif) {
@@ -2472,9 +2398,7 @@ export default function MapView(props: MapViewProps) {
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
-                const hadNative =
-                  img.exif?.HasNativeGPS === 'true' ||
-                  localExifMap[img.path]?.HasNativeGPS === 'true';
+                const hadNative = img.exif?.HasNativeGPS === 'true' || localExifMap[img.path]?.HasNativeGPS === 'true';
                 return { ...img, is_edited: hadNative ? true : img.is_edited, exif: cleaned };
               }
             }
@@ -2543,9 +2467,7 @@ export default function MapView(props: MapViewProps) {
               t('library.map.geotagSuccess', {
                 count: paths.length,
                 defaultValue:
-                  paths.length === 1
-                    ? 'Photo geotagged successfully'
-                    : `Successfully geotagged ${paths.length} photos`,
+                  paths.length === 1 ? 'Photo geotagged successfully' : `Successfully geotagged ${paths.length} photos`,
               }),
             );
           }
@@ -2554,9 +2476,7 @@ export default function MapView(props: MapViewProps) {
             t('library.map.geotagRemoved', {
               count: paths.length,
               defaultValue:
-                paths.length === 1
-                  ? 'GPS coordinates removed'
-                  : `GPS coordinates removed for ${paths.length} photos`,
+                paths.length === 1 ? 'GPS coordinates removed' : `GPS coordinates removed for ${paths.length} photos`,
             }),
           );
         }
@@ -2634,9 +2554,7 @@ export default function MapView(props: MapViewProps) {
               path,
               previousLat: currentGps.lat,
               previousLon: currentGps.lon,
-              hadNativeGps:
-                localExifMap[path]?.HasNativeGPS === 'true' ||
-                img?.exif?.HasNativeGPS === 'true',
+              hadNativeGps: localExifMap[path]?.HasNativeGPS === 'true' || img?.exif?.HasNativeGPS === 'true',
             },
           ],
         });
@@ -2644,10 +2562,9 @@ export default function MapView(props: MapViewProps) {
       }
 
       try {
-        const result = await invoke<Record<string, [number, number] | null>>(
-          Invokes.RevertGpsForPaths,
-          { paths: [path] },
-        );
+        const result = await invoke<Record<string, [number, number] | null>>(Invokes.RevertGpsForPaths, {
+          paths: [path],
+        });
         const coords = result[path] !== undefined ? result[path] : result[targetNorm];
 
         if (coords) {
@@ -2663,7 +2580,7 @@ export default function MapView(props: MapViewProps) {
 
           setLocalExifMap((prev) => {
             const next = { ...prev };
-            const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
+            const current = next[path] ? { ...next[path] } : img?.exif ? { ...img.exif } : {};
             delete current.IsGpsModified;
             next[path] = { ...current, ...updates };
             if (targetNorm !== path) {
@@ -2708,7 +2625,7 @@ export default function MapView(props: MapViewProps) {
           // Photo originally had NO GPS coordinates: clear from map back to dock
           setLocalExifMap((prev) => {
             const next = { ...prev };
-            const current = next[path] ? { ...next[path] } : (img?.exif ? { ...img.exif } : {});
+            const current = next[path] ? { ...next[path] } : img?.exif ? { ...img.exif } : {};
             delete current.GPSLatitude;
             delete current.GPSLatitudeRef;
             delete current.GPSLongitude;
@@ -2789,8 +2706,7 @@ export default function MapView(props: MapViewProps) {
       if (!mapRef.current) return;
 
       try {
-        const rawData =
-          e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+        const rawData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
         if (!rawData) return;
         const parsed = JSON.parse(rawData);
         const pathsToGeotag: string[] = Array.isArray(parsed?.paths) ? parsed.paths : [];
@@ -2953,7 +2869,7 @@ export default function MapView(props: MapViewProps) {
           const nextArr = Array.from(next);
           useLibraryStore.getState().setLibrary({
             multiSelectedPaths: nextArr,
-            libraryActivePath: nextArr.includes(path) ? path : (nextArr[nextArr.length - 1] || null),
+            libraryActivePath: nextArr.includes(path) ? path : nextArr[nextArr.length - 1] || null,
             selectionAnchorPath: path,
           });
           return next;
@@ -2981,9 +2897,7 @@ export default function MapView(props: MapViewProps) {
   const handlePhotoDragStart = useCallback(
     (photo: ImageFile, e: React.DragEvent) => {
       const pathsToDrag =
-        selectedDockPaths.has(photo.path) && selectedDockPaths.size > 1
-          ? Array.from(selectedDockPaths)
-          : [photo.path];
+        selectedDockPaths.has(photo.path) && selectedDockPaths.size > 1 ? Array.from(selectedDockPaths) : [photo.path];
 
       // Ensure active photo is selected in dock and synchronized with Information panel
       setSelectedDockPaths(new Set(pathsToDrag));
@@ -3198,7 +3112,8 @@ export default function MapView(props: MapViewProps) {
                 })}
               </span>
               <span className="text-[11px] text-text-secondary">
-                {repositioningPhotoPath.split(/[\\/]/).pop()} • {t('library.map.pressEscToCancel', { defaultValue: 'Press ESC to cancel' })}
+                {repositioningPhotoPath.split(/[\\/]/).pop()} •{' '}
+                {t('library.map.pressEscToCancel', { defaultValue: 'Press ESC to cancel' })}
               </span>
             </div>
             <button
@@ -3220,8 +3135,7 @@ export default function MapView(props: MapViewProps) {
               </p>
               <p className="text-xs text-text-secondary mb-3">
                 {t('library.map.noGpsDesc', {
-                  defaultValue:
-                    'None of the photos in this folder contain geographic information in EXIF metadata.',
+                  defaultValue: 'None of the photos in this folder contain geographic information in EXIF metadata.',
                 })}
               </p>
               <button
@@ -3300,8 +3214,7 @@ export default function MapView(props: MapViewProps) {
           e.preventDefault();
           e.stopPropagation();
           setIsDraggingOverMap(false);
-          const rawData =
-            e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+          const rawData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
           if (rawData) {
             try {
               const parsed = JSON.parse(rawData);
@@ -3432,11 +3345,7 @@ export default function MapView(props: MapViewProps) {
             return (
               <button
                 onClick={() => {
-                  applyGpsToPhotos(
-                    mapContextMenu.targetPaths,
-                    mapContextMenu.lat,
-                    mapContextMenu.lon,
-                  );
+                  applyGpsToPhotos(mapContextMenu.targetPaths, mapContextMenu.lat, mapContextMenu.lon);
                   setMapContextMenu(null);
                 }}
                 className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-left hover:bg-accent/20 hover:text-accent transition font-medium"

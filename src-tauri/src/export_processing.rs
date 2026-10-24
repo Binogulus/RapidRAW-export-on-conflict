@@ -2680,6 +2680,7 @@ mod tests {
             destination_type: None,
             subfolder: None,
             on_conflict: ConflictAction::OverwriteIfChanged,
+            dpi: None,
         };
 
         let fp1 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base, None);
@@ -2694,7 +2695,8 @@ mod tests {
         let fp3 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_quality, None);
         assert_ne!(fp1, fp3, "Quality change must change fingerprint");
 
-        let fp4 = compute_export_fingerprint(path, mtime + 1000, &adj1, "jpg", &settings_base, None);
+        let fp4 =
+            compute_export_fingerprint(path, mtime + 1000, &adj1, "jpg", &settings_base, None);
         assert_ne!(fp1, fp4, "File mtime change must change fingerprint");
 
         let fp5 = compute_export_fingerprint(path, mtime, &adj1, "png", &settings_base, None);
@@ -2705,7 +2707,14 @@ mod tests {
             Some("12 deg 29 min 10 sec".to_string()),
             Some("true".to_string()),
         );
-        let fp_gps = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base, Some(&gps_test_info));
+        let fp_gps = compute_export_fingerprint(
+            path,
+            mtime,
+            &adj1,
+            "jpg",
+            &settings_base,
+            Some(&gps_test_info),
+        );
         assert_ne!(fp1, fp_gps, "GPS change must change fingerprint");
     }
 
