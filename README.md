@@ -107,11 +107,41 @@ Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos
 
 ---
 
+## 🚀 Try it
+
+The download links further down are the official upstream RapidRAW releases (without Map View). You can try this fork in two ways:
+
+#### Option 1 — Build from Source
+With [Rust](https://www.rust-lang.org/tools/install) and [Node.js](https://nodejs.org/) installed:
+
+```bash
+git clone https://github.com/Binogulus/RapidRAW-map-view.git
+cd RapidRAW-map-view
+npm install
+npm run tauri build
+./src-tauri/target/release/RapidRAW
+```
+
+*(For quick development testing without creating a release bundle, you can also run `npm start` instead of `npm run tauri build`.)*
+
+#### Option 2 — Ready-Made CI Test Builds (Windows, macOS, Linux)
+Pre-built packages for **Linux** (`.AppImage`, `.deb`), **Windows** (`.exe`, `.msi`, and self-contained **Portable `.zip`**), and **macOS** (`.dmg` for Apple Silicon) are automatically compiled on every push:
+1. Open the **[Build Multi-OS (Private Test)](https://github.com/Binogulus/RapidRAW-map-view/actions/workflows/build-test-artifacts.yml)** workflow on GitHub Actions (requires being signed into a GitHub account to download artifacts).
+2. Click the latest successful run and scroll down to the **Artifacts** section at the bottom of the page.
+
+---
+
+Once launched, open any folder or album in the **Library** and click the **Map View** icon (4th button in the top display-mode switcher, next to *Grid*, *List*, and *Culling*).
+
+The fork shares its settings, presets, albums, and `.rrdata` sidecars with an installed RapidRAW, and only one of the two can run at a time (except the Windows Portable `.zip` build, which stores all data in a local `RapidRAW_Data` folder next to the executable). Please report any issues with Map View here in this fork, not upstream.
+
 ### 🤝 Upstream Project & Attribution
 
 RapidRAW is created and maintained by **[Timon Käch (@CyberTimon)](https://github.com/CyberTimon/RapidRAW)**. This branch is dedicated to contributing the Map View and non-destructive geotagging workflow upstream into the official RapidRAW codebase.
 
 ---
+
+<sub>Everything below is the README of RapidRAW itself.</sub>
 
 RapidRAW is a modern, high-performance alternative to Adobe Lightroom®. It delivers a simple, beautiful editing experience in a lightweight package for Windows, macOS, Linux, and Android.
 
