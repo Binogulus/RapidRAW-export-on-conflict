@@ -2018,11 +2018,14 @@ export default function MapView(props: MapViewProps) {
     targetPaths: string[];
   } | null>(null);
 
+  const storeExifByPath = useLibraryStore((s) => s.exifByPath);
   const [localExifMap, setLocalExifMap] = useState<Record<string, Record<string, string>>>(() => {
     const initial: Record<string, Record<string, string>> = {};
+    const currentStoreExif = useLibraryStore.getState().exifByPath || {};
     for (const img of props.imageList || []) {
-      if (img.exif) {
-        initial[img.path] = img.exif;
+      const exif = currentStoreExif[img.path] || img.exif;
+      if (exif) {
+        initial[img.path] = exif;
       }
     }
     return initial;
@@ -2217,26 +2220,31 @@ export default function MapView(props: MapViewProps) {
     setCanUndo(false);
   }, [currentFolderPath]);
 
-  // Sync localExifMap when imageList in store is updated (e.g. Reset Adjustments or Revert GPS)
+  // Sync localExifMap when imageList or exifByPath in store is updated (e.g. Reset Adjustments or Revert GPS)
   useEffect(() => {
     if (!imageList || imageList.length === 0) return;
     setLocalExifMap((prev) => {
       let changed = false;
       const next = { ...prev };
       for (const img of imageList) {
-        if (img.exif && next[img.path] !== img.exif) {
-          next[img.path] = img.exif;
+        const exif = storeExifByPath?.[img.path] || img.exif;
+        if (exif && next[img.path] !== exif) {
+          next[img.path] = exif;
           changed = true;
         }
       }
       return changed ? next : prev;
     });
-  }, [imageList]);
+  }, [imageList, storeExifByPath]);
 
   // Non-blocking, smooth EXIF ingestion without continuous UI re-sorting loops
   useEffect(() => {
     const unrequested = imageList.filter(
-      (img) => !img.exif && !localExifMap[img.path] && !requestedExifRef.current.has(img.path),
+      (img) =>
+        !img.exif &&
+        !storeExifByPath?.[img.path] &&
+        !localExifMap[img.path] &&
+        !requestedExifRef.current.has(img.path),
     );
     if (unrequested.length === 0) return;
 
@@ -2266,7 +2274,7 @@ export default function MapView(props: MapViewProps) {
     return () => {
       isCancelled = true;
     };
-  }, [imageList.length, currentFolderPath]);
+  }, [imageList.length, currentFolderPath, storeExifByPath]);
 
   // Compute Geotagged and Unlocated photos
   const { geotaggedPhotos, unlocatedPhotos, totalPhotos, geotaggedCount } = useMemo(() => {
@@ -2274,7 +2282,7 @@ export default function MapView(props: MapViewProps) {
     const unlocated: ImageFile[] = [];
 
     for (const img of imageList) {
-      const exifOverride = localExifMap[img.path];
+      const exifOverride = localExifMap[img.path] || storeExifByPath?.[img.path];
       const gps: GeoLocation | null = getImageGps(img, exifOverride);
       if (gps) {
         const filename = img.path.split(/[\\/]/).pop() || '';
@@ -2304,7 +2312,7 @@ export default function MapView(props: MapViewProps) {
       totalPhotos: imageList.length,
       geotaggedCount: items.length,
     };
-  }, [imageList, localExifMap]);
+  }, [imageList, localExifMap, storeExifByPath]);
 
   // Apply or remove GPS coordinates to sidecars and state, with optional Undo tracking
   const applyGpsToPhotosInternal = useCallback(
@@ -2381,30 +2389,36 @@ export default function MapView(props: MapViewProps) {
           return next;
         });
 
-        // 3. Update library store imageList
+        // 3. Update library store imageList and exifByPath
         const normalizePath = (p: string) => p.replace(/\\/g, '/').split('?vc=')[0];
         const pathsNormSet = new Set(paths.map(normalizePath));
-        useLibraryStore.getState().setLibrary((state) => ({
-          imageList: state.imageList.map((img) => {
+        useLibraryStore.getState().setLibrary((state) => {
+          const nextExifByPath = { ...state.exifByPath };
+          const nextImageList = state.imageList.map((img) => {
             if (pathsNormSet.has(normalizePath(img.path))) {
+              const baseExif = state.exifByPath[img.path] || img.exif || localExifMap[img.path] || {};
               if (lat !== null && lon !== null) {
-                const hasNative = img.exif?.HasNativeGPS === 'true' || localExifMap[img.path]?.HasNativeGPS === 'true';
-                const modUpdate = hasNative ? { IsGpsModified: 'true' } : {};
-                return { ...img, is_edited: true, exif: { ...(img.exif || {}), ...updates, ...modUpdate } };
-              } else if (img.exif) {
-                const cleaned = { ...img.exif };
+                const hasNative = baseExif.HasNativeGPS === 'true';
+                const modUpdate: Record<string, string> = hasNative ? { IsGpsModified: 'true' } : {};
+                const updatedExif: Record<string, string> = { ...baseExif, ...updates, ...modUpdate };
+                nextExifByPath[img.path] = updatedExif;
+                return { ...img, is_edited: true, exif: updatedExif };
+              } else {
+                const cleaned = { ...baseExif };
                 delete cleaned.GPSLatitude;
                 delete cleaned.GPSLatitudeRef;
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
-                const hadNative = img.exif?.HasNativeGPS === 'true' || localExifMap[img.path]?.HasNativeGPS === 'true';
+                const hadNative = baseExif.HasNativeGPS === 'true';
+                nextExifByPath[img.path] = cleaned;
                 return { ...img, is_edited: hadNative ? true : img.is_edited, exif: cleaned };
               }
             }
             return img;
-          }),
-        }));
+          });
+          return { imageList: nextImageList, exifByPath: nextExifByPath };
+        });
 
         // 4. Update editor store if current image matches
         useEditorStore.getState().setEditor((state) => {
@@ -2589,16 +2603,20 @@ export default function MapView(props: MapViewProps) {
             return next;
           });
 
-          useLibraryStore.getState().setLibrary((state) => ({
-            imageList: state.imageList.map((i) => {
+          useLibraryStore.getState().setLibrary((state) => {
+            const nextExifByPath = { ...state.exifByPath };
+            const nextImageList = state.imageList.map((i) => {
               if (normalizePath(i.path) === targetNorm) {
-                const currentExif = i.exif ? { ...i.exif } : {};
+                const currentExif = { ...(state.exifByPath[i.path] || i.exif || {}) };
                 delete currentExif.IsGpsModified;
-                return { ...i, is_edited: false, exif: { ...currentExif, ...updates } };
+                const updatedExif = { ...currentExif, ...updates };
+                nextExifByPath[i.path] = updatedExif;
+                return { ...i, is_edited: false, exif: updatedExif };
               }
               return i;
-            }),
-          }));
+            });
+            return { imageList: nextImageList, exifByPath: nextExifByPath };
+          });
 
           useEditorStore.getState().setEditor((state) => {
             if (!state.selectedImage || normalizePath(state.selectedImage.path) !== targetNorm) {
@@ -2639,21 +2657,24 @@ export default function MapView(props: MapViewProps) {
             return next;
           });
 
-          useLibraryStore.getState().setLibrary((state) => ({
-            imageList: state.imageList.map((i) => {
+          useLibraryStore.getState().setLibrary((state) => {
+            const nextExifByPath = { ...state.exifByPath };
+            const nextImageList = state.imageList.map((i) => {
               if (normalizePath(i.path) === targetNorm) {
-                const cleaned = i.exif ? { ...i.exif } : {};
+                const cleaned = { ...(state.exifByPath[i.path] || i.exif || {}) };
                 delete cleaned.GPSLatitude;
                 delete cleaned.GPSLatitudeRef;
                 delete cleaned.GPSLongitude;
                 delete cleaned.GPSLongitudeRef;
                 delete cleaned.IsGpsModified;
                 cleaned.HasNativeGPS = 'false';
+                nextExifByPath[i.path] = cleaned;
                 return { ...i, is_edited: false, exif: cleaned };
               }
               return i;
-            }),
-          }));
+            });
+            return { imageList: nextImageList, exifByPath: nextExifByPath };
+          });
 
           useEditorStore.getState().setEditor((state) => {
             if (!state.selectedImage || normalizePath(state.selectedImage.path) !== targetNorm) {
