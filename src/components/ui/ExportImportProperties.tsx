@@ -22,6 +22,7 @@ export const FILE_FORMATS: Array<FileFormat> = [
 
 export const FILENAME_VARIABLES: Array<string> = [
   '{original_filename}',
+  '{original_filename_number}',
   '{sequence}',
   '{YYYY}',
   '{MM}',
@@ -30,7 +31,15 @@ export const FILENAME_VARIABLES: Array<string> = [
   '{mm}',
 ];
 
+const UNIQUE_FILENAME_VARIABLES: Array<string> = ['{original_filename}', '{original_filename_number}', '{sequence}'];
+
+export const isUniqueFilenameTemplate = (template: string): boolean =>
+  UNIQUE_FILENAME_VARIABLES.some((variable) => template.includes(variable));
+
 export type TiffBitDepth = 8 | 16;
+
+export const DEFAULT_EXPORT_DPI = 300;
+export const MAX_EXPORT_DPI = 65535;
 
 export enum ConflictAction {
   CreateUnique = 'createUnique',
@@ -67,6 +76,7 @@ export interface ExportSettings {
   preserveFolders?: boolean;
   destinationType?: string;
   subfolder?: string;
+  dpi?: number;
   onConflict?: ConflictAction;
 }
 
@@ -97,6 +107,7 @@ interface WatermarkSettings {
 }
 
 export interface ExportState {
+  destination?: string | null;
   errorMessage: string;
   progress: Progress;
   status: Status;
@@ -112,6 +123,7 @@ export interface FileFormat {
 }
 
 export interface ImportState {
+  destination?: string | null;
   errorMessage: string;
   path?: string;
   progress?: Progress;
@@ -134,6 +146,7 @@ export interface ExportPreset {
   fileFormat: string;
   jpegQuality: number;
   tiffBitDepth?: TiffBitDepth;
+  dpi?: number;
   enableResize: boolean;
   resizeMode: string;
   resizeValue: number;
