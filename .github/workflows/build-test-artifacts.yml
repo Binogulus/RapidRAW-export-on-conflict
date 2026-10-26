@@ -3,6 +3,9 @@ name: 'Build Multi-OS (Private Test)'
 on:
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab at any time
   push:
+    branches:
+      - 'combo/map-and-export'
+      - 'main'
     tags:
       - 'v*' # Automatically triggers when pushing a version tag (e.g. v1.6.4-test1)
 
