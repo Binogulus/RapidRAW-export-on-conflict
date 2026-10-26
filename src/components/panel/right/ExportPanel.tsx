@@ -34,6 +34,8 @@ import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { useEditorStore } from '../../../store/useEditorStore';
 import { useUIStore } from '../../../store/useUIStore';
+import ImmichExportOptions, { useImmichExportAvailable, useImmichExportChoice } from '../../immich/ImmichExportOptions';
+import { prepareImmichExport } from '../../immich/immichApi';
 import { formatBytes } from '../../../utils/formatBytes';
 
 interface ExportPanelProps {
@@ -397,6 +399,9 @@ export default function ExportPanel({
   const filenameInputRef = useRef<HTMLInputElement>(null);
   const osPlatform = useOsPlatform();
   const isAndroid = osPlatform === 'android';
+  const canExportToImmich = useImmichExportAvailable() && !isAndroid;
+  const destination = destinationType === 'immich' && !canExportToImmich ? 'customFolder' : destinationType;
+  const immichExport = useImmichExportChoice();
   const activePanels = useUIStore((state) => state.activePanels);
   const isPanelReallyActive = Object.values(activePanels).includes(Panel.Export);
 
@@ -503,7 +508,7 @@ export default function ExportPanel({
       keepMetadata,
       preserveTimestamps,
       preserveFolders,
-      destinationType,
+      destinationType: destination,
       subfolder,
       onConflict,
       resize: enableResize ? { mode: resizeMode, value: resizeValue, dontEnlarge } : null,
@@ -601,7 +606,7 @@ export default function ExportPanel({
       keepMetadata,
       preserveTimestamps,
       preserveFolders,
-      destinationType,
+      destinationType: destination,
       subfolder,
       onConflict,
       resize: enableResize ? { mode: resizeMode, value: resizeValue, dontEnlarge } : null,
@@ -628,10 +633,14 @@ export default function ExportPanel({
       const selectedFormat: any = FILE_FORMATS.find((f) => f.id === fileFormat);
 
       let outputFolderOrFile = '';
-      const isOriginalFolder = destinationType === 'originalFolder';
-      const shouldChooseOutputFile = numImages === 1 && !preserveFolders && !isOriginalFolder;
+      const isOriginalFolder = destination === 'originalFolder';
+      const isImmich = destination === 'immich';
+      const shouldChooseOutputFile = numImages === 1 && !preserveFolders && !isOriginalFolder && !isImmich;
 
-      if (isOriginalFolder) {
+      if (isImmich) {
+        exportSettings.preserveFolders = false;
+        outputFolderOrFile = await prepareImmichExport(immichExport.album, immichExport.withOriginal);
+      } else if (isOriginalFolder) {
         outputFolderOrFile = 'originalFolderDummy';
       } else if (shouldChooseOutputFile) {
         const originalFilename = pathsToExport[0].split(/[\\/]/).pop() || '';
@@ -664,7 +673,7 @@ export default function ExportPanel({
 
       if (isAndroid || outputFolderOrFile) {
         if (!isAndroid) {
-          if (isOriginalFolder) {
+          if (isOriginalFolder || isImmich) {
             saveLastUsedPreset(lastExportPath || '');
           } else {
             const dir = shouldChooseOutputFile
@@ -678,9 +687,10 @@ export default function ExportPanel({
         }
 
         setExportState({
-          status: Status.Exporting,
-          progress: { current: 0, total: numImages },
+          destination: isOriginalFolder || isImmich || isAndroid ? null : outputFolderOrFile,
           errorMessage: '',
+          progress: { current: 0, total: numImages },
+          status: Status.Exporting,
           exportedCount: undefined,
           skippedCount: undefined,
           totalCount: undefined,
@@ -796,14 +806,17 @@ export default function ExportPanel({
                   options={[
                     { label: t('export.destination.customFolder'), value: 'customFolder' },
                     { label: t('export.destination.originalFolder'), value: 'originalFolder' },
+                    ...(canExportToImmich ? [{ label: t('immich.export.destination'), value: 'immich' }] : []),
                   ]}
-                  value={destinationType || 'customFolder'}
+                  value={destination || 'customFolder'}
                   onChange={(val) => setDestinationType(val as string)}
                   disabled={isExporting}
                   className="w-full"
                 />
 
-                {destinationType === 'originalFolder' && (
+                {destination === 'immich' && <ImmichExportOptions disabled={isExporting} />}
+
+                {destination === 'originalFolder' && (
                   <div className="flex items-center gap-3 pl-2 border-l-2 border-surface">
                     <Text variant={TextVariants.label} className="whitespace-nowrap min-w-[70px]">
                       {t('export.destination.subfolder')}
