@@ -1256,7 +1256,7 @@ export default function ExportPanel({
                 : t('export.status.detailWithSkipped', {
                     exported: exportedCount,
                     skipped: skippedCount,
-                    total: totalCount || (exportedCount || 0) + skippedCount,
+                    total: totalCount || ((exportedCount || 0) + skippedCount),
                   })}
             </span>
           ) : isEstimating ? (
