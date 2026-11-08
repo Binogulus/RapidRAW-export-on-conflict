@@ -3020,6 +3020,7 @@ mod tests {
             destination_type: None,
             subfolder: None,
             on_conflict: ConflictAction::OverwriteIfChanged,
+            export_original: None,
         };
 
         let fp1 = compute_export_fingerprint(path, mtime, &adj1, "jpg", &settings_base);
