@@ -9,7 +9,6 @@ export function parseGpsCoordinate(coordStr: string): number | null {
   if (!coordStr) return null;
   const trimmed = coordStr.trim();
 
-  // 1. Deg / Min / Sec format (e.g. "45 deg 27 min 51.12 sec" or "45° 27' 51.12\"")
   const dmsMatch = trimmed.match(
     /(\d+\.?\d*)\s*(?:deg|°)\s*(\d+\.?\d*)\s*(?:min|'|’|′)\s*(\d+\.?\d*)\s*(?:sec|"|”|″)?/i,
   );
@@ -22,7 +21,6 @@ export function parseGpsCoordinate(coordStr: string): number | null {
     }
   }
 
-  // 2. Comma separated deg, min, sec (e.g. "45, 27, 51.12")
   const commaParts = trimmed.split(/,\s*/);
   if (commaParts.length === 3) {
     const deg = parseFloat(commaParts[0]);
@@ -33,7 +31,6 @@ export function parseGpsCoordinate(coordStr: string): number | null {
     }
   }
 
-  // 3. Direct decimal degrees float (e.g. "45.4642")
   const directVal = parseFloat(trimmed);
   if (!isNaN(directVal) && isFinite(directVal)) {
     return directVal;
@@ -42,7 +39,10 @@ export function parseGpsCoordinate(coordStr: string): number | null {
   return null;
 }
 
-export function getImageGps(image: ImageFile, overrideExif?: Record<string, string>): GeoLocation | null {
+export function getImageGps(
+  image: ImageFile,
+  overrideExif?: Record<string, string>,
+): GeoLocation | null {
   const exif = overrideExif !== undefined ? overrideExif : image.exif;
   if (!exif) return null;
 
@@ -65,12 +65,10 @@ export function getImageGps(image: ImageFile, overrideExif?: Record<string, stri
     lon = -Math.abs(lon);
   }
 
-  // Validate standard latitude [-90, 90] and longitude [-180, 180]
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
     return null;
   }
 
-  // Ignore Null Island (0, 0) placeholder often written by cameras before acquiring GPS lock
   if (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001) {
     return null;
   }
@@ -78,7 +76,10 @@ export function getImageGps(image: ImageFile, overrideExif?: Record<string, stri
   return { lat, lon };
 }
 
-export function getImageTimestamp(image: ImageFile, overrideExif?: Record<string, string>): string | null {
+export function getImageTimestamp(
+  image: ImageFile,
+  overrideExif?: Record<string, string>,
+): string | null {
   const exif = overrideExif !== undefined ? overrideExif : image.exif;
   if (exif) {
     const dt = exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate || exif.DateTime;
