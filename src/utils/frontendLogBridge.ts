@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { Invokes } from '../components/ui/AppProperties';
+import { Invokes } from '../types/invokes';
 
 type FrontendLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -180,7 +180,7 @@ function serializeValue(value: unknown, depth: number, seen: WeakSet<object>): u
   }
 
   if (typeof value === 'function') {
-    return `[Function ${(value as Function).name || 'anonymous'}]`;
+    return `[Function ${value.name || 'anonymous'}]`;
   }
 
   if (typeof value === 'bigint') {
