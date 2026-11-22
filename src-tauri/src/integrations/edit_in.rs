@@ -243,6 +243,9 @@ async fn render_tiff(
     let export_settings = ExportSettings {
         jpeg_quality: 100,
         tiff_bit_depth: TiffBitDepth::Sixteen,
+        color_space: Default::default(),
+        hdr: false,
+        hdr_headroom: crate::render::hdr::Headroom::DEFAULT_STOPS,
         resize: None,
         border: None,
         pad: None,
@@ -256,6 +259,7 @@ async fn render_tiff(
         destination_type: None,
         subfolder: None,
         dpi: None,
+        on_conflict: None,
         export_original: None,
     };
     export_images_and_wait(
@@ -275,6 +279,7 @@ async fn render_tiff(
         app_handle,
     )
     .await
+    .map(|_| ())
 }
 
 #[tauri::command]
