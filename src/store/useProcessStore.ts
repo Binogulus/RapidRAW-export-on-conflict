@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Progress } from '../types/library';
-import { ExportState, ImportState, Status } from '../types/export';
+import { ExportState, ImportState, PublishItemState, PublishSyncStatus, Status } from '../types/export';
 
 export interface ExternalEditSession {
   source: string;
@@ -82,6 +82,9 @@ export const selectAiModelDownloadStatus = (state: ProcessState) => {
 interface ProcessState {
   exportState: ExportState;
   importState: ImportState;
+  publishSyncStatus: PublishSyncStatus | null;
+  publishItemStates: Record<string, PublishItemState>;
+  publishSyncRevision: number;
   thumbnails: Record<string, string>;
   mediumThumbnails: Record<string, string>;
   thumbnailProgress: Progress;
@@ -99,6 +102,8 @@ interface ProcessState {
 
   setProcess: (state: Partial<ProcessState> | ((state: ProcessState) => Partial<ProcessState>)) => void;
   setExportState: (updater: Partial<ExportState> | ((state: ExportState) => Partial<ExportState>)) => void;
+  setPublishSyncStatus: (status: PublishSyncStatus | null) => void;
+  bumpPublishSyncRevision: () => void;
   setImportState: (updater: Partial<ImportState> | ((state: ImportState) => Partial<ImportState>)) => void;
   setPreview: (path: string, url: string, thumbKey: string) => void;
   clearPreviews: () => void;
@@ -173,6 +178,9 @@ const syncStatusJob = (
 export const useProcessStore = create<ProcessState>((set, get) => ({
   exportState: { errorMessage: '', progress: { current: 0, total: 0 }, status: Status.Idle },
   importState: { errorMessage: '', path: '', progress: { current: 0, total: 0 }, status: Status.Idle },
+  publishSyncStatus: null,
+  publishItemStates: {},
+  publishSyncRevision: 0,
   thumbnails: {},
   mediumThumbnails: {},
   thumbnailProgress: { current: 0, total: 0 },
@@ -187,6 +195,17 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
   aiPendingPaths: {},
   jobs: {},
   jobsSeenAt: Date.now(),
+
+  setPublishSyncStatus: (status) =>
+    set({
+      publishSyncStatus: status,
+      publishItemStates: status?.itemStates ?? {},
+    }),
+
+  bumpPublishSyncRevision: () =>
+    set((prev) => ({
+      publishSyncRevision: prev.publishSyncRevision + 1,
+    })),
 
   setProcess: (updater) => {
     let nextState: Partial<ProcessState> = {};
@@ -226,6 +245,8 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
             progress: { current: 0, total: 0 },
             exportedCount: undefined,
             skippedCount: undefined,
+            deletedCount: undefined,
+            totalCount: undefined,
           },
         }));
       }, 5000);

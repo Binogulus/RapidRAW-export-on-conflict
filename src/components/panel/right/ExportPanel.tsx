@@ -1,7 +1,21 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { FileInput, CheckCircle, XCircle, Loader, Ban, ChevronDown, ChevronRight, Settings, X } from 'lucide-react';
+import {
+  FileInput,
+  CheckCircle,
+  XCircle,
+  Loader,
+  Ban,
+  ChevronDown,
+  ChevronRight,
+  Settings,
+  X,
+  FolderOpen,
+  RefreshCw,
+  Trash2,
+  PlusCircle,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import debounce from 'lodash.debounce';
@@ -23,6 +37,7 @@ import {
   ExportState,
   FileFormats,
   MAX_EXPORT_DPI,
+  PublishSyncStatus,
   TiffBitDepth,
   WatermarkAnchor,
   COLOR_SPACE_FILE_FORMATS,
@@ -42,6 +57,8 @@ import { useDisplayStatus } from '../../../hooks/useDisplayStatus';
 import Text from '../../ui/Text';
 import { TextColors, TextVariants, TextWeights } from '../../../types/typography';
 import { useEditorStore } from '../../../store/useEditorStore';
+import { useLibraryStore } from '../../../store/useLibraryStore';
+import { useProcessStore } from '../../../store/useProcessStore';
 import { useUIStore } from '../../../store/useUIStore';
 import ImmichExportOptions, { useImmichExportAvailable, useImmichExportChoice } from '../../immich/ImmichExportOptions';
 import { prepareImmichExport } from '../../../utils/immichApi';
@@ -274,6 +291,7 @@ export default function ExportPanel({
       { label: t('export.conflict.createUnique'), value: ConflictAction.CreateUnique },
       { label: t('export.conflict.overwrite'), value: ConflictAction.Overwrite },
       { label: t('export.conflict.overwriteIfChanged'), value: ConflictAction.OverwriteIfChanged },
+      { label: t('export.conflict.publishSync'), value: ConflictAction.PublishSync },
       { label: t('export.conflict.skip'), value: ConflictAction.Skip },
     ],
     [t],
@@ -445,12 +463,27 @@ export default function ExportPanel({
   const activePanels = useUIStore((state) => state.activePanels);
   const isPanelReallyActive = Object.values(activePanels).includes(Panel.Export);
 
-  const { status, progress, errorMessage, exportedCount, skippedCount } = exportState;
+  const { status, progress, errorMessage, exportedCount, skippedCount, deletedCount } = exportState;
   const isExporting = [Status.Exporting, Status.Cancelling].includes(status);
   const isCancelling = status === Status.Cancelling;
   const isLibraryContext = !!onClose;
 
-  const pathsToExport = useMemo(() => {
+  const imageList = useLibraryStore((s) => s.imageList);
+  const currentFolderPath = useLibraryStore((s) => s.currentFolderPath);
+  const publishSyncStatus = useProcessStore((s) => s.publishSyncStatus);
+  const publishSyncRevision = useProcessStore((s) => s.publishSyncRevision);
+  const setPublishSyncStatus = useProcessStore((s) => s.setPublishSyncStatus);
+  const [publishFullFolder, setPublishFullFolder] = useState(true);
+  const publishRequestIdRef = useRef(0);
+
+  const isPublishSync = onConflict === ConflictAction.PublishSync && destination !== 'immich';
+  const isFingerprintMode =
+    (onConflict === ConflictAction.PublishSync || onConflict === ConflictAction.OverwriteIfChanged) &&
+    destination !== 'immich';
+
+  const allFolderPaths = useMemo(() => imageList.map((img) => img.path), [imageList]);
+
+  const selectedPaths = useMemo(() => {
     return isLibraryContext
       ? multiSelectedPaths
       : multiSelectedPaths.length > 0
@@ -460,7 +493,204 @@ export default function ExportPanel({
           : [];
   }, [isLibraryContext, multiSelectedPaths, selectedImage?.path]);
 
+  const pathsToExport = useMemo(() => {
+    if (isPublishSync && publishFullFolder && allFolderPaths.length > 0) {
+      return allFolderPaths;
+    }
+    return selectedPaths;
+  }, [isPublishSync, publishFullFolder, allFolderPaths, selectedPaths]);
+
   const numImages = pathsToExport.length;
+  const lastExportPath = appSettings?.exportPresets?.find((p) => p.id === '__last_used__')?.lastExportPath;
+
+  const handleSelectPublishCustomFolder = useCallback(async () => {
+    if (isAndroid || isExporting) return;
+    const picked = (await open({
+      title: t('export.dialog.selectFolderTitle', { count: Math.max(numImages, 1) }),
+      directory: true,
+      defaultPath: lastExportPath ?? undefined,
+    })) as string | null;
+    if (picked) {
+      saveLastUsedPreset(picked);
+    }
+  }, [isAndroid, isExporting, t, numImages, lastExportPath, saveLastUsedPreset]);
+
+  const debouncedCheckPublishStatus = useMemo(
+    () =>
+      debounce(
+        async (
+          requestId: number,
+          paths: string[],
+          scopePaths: string[],
+          outputFolder: string | null,
+          folderPath: string | null,
+          baseFolders: string[],
+          exportSettings: ExportSettings,
+          format: string,
+          currentPath: string | undefined,
+          currentAdj: any,
+        ) => {
+          try {
+            const fullStatus: PublishSyncStatus = await invoke(Invokes.GetPublishSyncStatus, {
+              paths,
+              outputFolder,
+              currentFolderPath: folderPath,
+              baseOriginFolders: baseFolders,
+              exportSettings,
+              outputFormat: format,
+              currentEditPath: currentPath || null,
+              currentEditAdjustments: currentAdj || null,
+            });
+            if (requestId !== publishRequestIdRef.current) return;
+
+            if (scopePaths.length !== paths.length && scopePaths.length > 0) {
+              const scopeSet = new Set(scopePaths);
+              let newCount = 0;
+              let modifiedCount = 0;
+              let syncedCount = 0;
+              for (const p of scopePaths) {
+                if (!scopeSet.has(p)) continue;
+                const st = fullStatus.itemStates[p];
+                if (st === 'new') newCount++;
+                else if (st === 'modified') modifiedCount++;
+                else if (st === 'synced') syncedCount++;
+              }
+              setPublishSyncStatus({
+                ...fullStatus,
+                newCount,
+                modifiedCount,
+                syncedCount,
+              });
+            } else {
+              setPublishSyncStatus(fullStatus);
+            }
+          } catch {
+            if (requestId !== publishRequestIdRef.current) return;
+          }
+        },
+        250,
+      ),
+    [setPublishSyncStatus],
+  );
+
+  useEffect(() => {
+    if (!isFingerprintMode) {
+      setPublishSyncStatus(null);
+      return;
+    }
+
+    const exportSettings: ExportSettings = {
+      filenameTemplate,
+      jpegQuality,
+      tiffBitDepth,
+      colorSpace,
+      hdr,
+      hdrHeadroom,
+      keepMetadata,
+      preserveTimestamps,
+      preserveFolders,
+      destinationType: destination,
+      subfolder,
+      onConflict,
+      resize: enableResize ? { mode: resizeMode, value: resizeValue, dontEnlarge } : null,
+      border: borderSettings,
+      pad: padSettings,
+      stripGps,
+      exportMasks,
+      exportOriginal: exportOriginal ? { crop: originalCrop, keepExposure: originalKeepExposure } : null,
+      watermark:
+        enableWatermark && watermarkPath
+          ? {
+              path: watermarkPath,
+              anchor: watermarkAnchor,
+              scale: watermarkScale,
+              spacing: watermarkSpacing,
+              opacity: watermarkOpacity,
+            }
+          : null,
+      dpi,
+    };
+    const format = FILE_FORMATS.find((f: FileFormat) => f.id === fileFormat)?.extensions[0] || 'jpeg';
+    const allPaths = allFolderPaths.length > 0 ? allFolderPaths : pathsToExport;
+
+    const runCheck = () =>
+      debouncedCheckPublishStatus(
+        ++publishRequestIdRef.current,
+        allPaths,
+        pathsToExport,
+        lastExportPath || null,
+        currentFolderPath,
+        rootPaths,
+        exportSettings,
+        format,
+        selectedImage?.path,
+        adjustmentsRef.current,
+      );
+
+    runCheck();
+
+    let { adjustments: prevAdjustments } = useEditorStore.getState();
+    const unsubscribe = useEditorStore.subscribe((state) => {
+      if (state.adjustments === prevAdjustments) return;
+      prevAdjustments = state.adjustments;
+      adjustmentsRef.current = state.adjustments;
+      runCheck();
+    });
+
+    return () => {
+      unsubscribe();
+      debouncedCheckPublishStatus.cancel();
+    };
+  }, [
+    isFingerprintMode,
+    allFolderPaths,
+    pathsToExport,
+    lastExportPath,
+    currentFolderPath,
+    rootPaths,
+    selectedImage?.path,
+    fileFormat,
+    jpegQuality,
+    tiffBitDepth,
+    colorSpace,
+    hdr,
+    hdrHeadroom,
+    dpi,
+    enableResize,
+    resizeMode,
+    resizeValue,
+    dontEnlarge,
+    enablePad,
+    padRatioWidthField.text,
+    padRatioHeightField.text,
+    padColor,
+    enableBorder,
+    borderBasis,
+    borderHorizontalField.text,
+    borderVerticalField.text,
+    borderColor,
+    keepMetadata,
+    preserveTimestamps,
+    stripGps,
+    filenameTemplate,
+    enableWatermark,
+    watermarkPath,
+    watermarkAnchor,
+    watermarkScale,
+    watermarkSpacing,
+    watermarkOpacity,
+    exportMasks,
+    exportOriginal,
+    originalCrop,
+    originalKeepExposure,
+    preserveFolders,
+    destination,
+    subfolder,
+    onConflict,
+    publishSyncRevision,
+    debouncedCheckPublishStatus,
+    setPublishSyncStatus,
+  ]);
 
   useEffect(() => {
     const fetchDims = async () => {
@@ -477,7 +707,7 @@ export default function ExportPanel({
       }
     };
     fetchDims();
-  }, [pathsToExport, isLibraryContext, selectedImage, enableWatermark, numImages, isVisible]);
+  }, [pathsToExport, isLibraryContext, selectedImage, enableWatermark, numImages, isVisible, isPanelReallyActive]);
 
   useEffect(() => {
     const fetchWatermarkDimensions = async () => {
@@ -635,6 +865,9 @@ export default function ExportPanel({
     exportMasks,
     preserveFolders,
     isLibraryContext,
+    destination,
+    subfolder,
+    onConflict,
   ]);
 
   const handleVariableClick = (variable: string) => {
@@ -651,8 +884,13 @@ export default function ExportPanel({
     }, 0);
   };
 
+  const pendingDeletesCount = isPublishSync ? (publishSyncStatus?.deletedCount ?? 0) : 0;
+  const pendingExportsCount = isPublishSync
+    ? (publishSyncStatus?.newCount ?? 0) + (publishSyncStatus?.modifiedCount ?? 0)
+    : numImages;
+
   const handleExport = async () => {
-    if (numImages === 0 || isExporting) return;
+    if ((numImages === 0 && pendingDeletesCount === 0) || isExporting) return;
 
     const exportSettings: ExportSettings = {
       filenameTemplate,
@@ -686,15 +924,14 @@ export default function ExportPanel({
       dpi,
     };
 
-    const lastExportPath = appSettings?.exportPresets?.find((p) => p.id === '__last_used__')?.lastExportPath;
-
     try {
       const selectedFormat: any = FILE_FORMATS.find((f) => f.id === fileFormat);
 
       let outputFolderOrFile = '';
       const isOriginalFolder = destination === 'originalFolder';
       const isImmich = destination === 'immich';
-      const shouldChooseOutputFile = numImages === 1 && !preserveFolders && !isOriginalFolder && !isImmich;
+      const shouldChooseOutputFile =
+        !isPublishSync && numImages === 1 && !preserveFolders && !isOriginalFolder && !isImmich;
 
       if (isImmich) {
         exportSettings.preserveFolders = false;
@@ -704,6 +941,8 @@ export default function ExportPanel({
         outputFolderOrFile = await prepareImmichExport(immichExport.album, immichExport.withOriginal);
       } else if (isOriginalFolder) {
         outputFolderOrFile = 'originalFolderDummy';
+      } else if (isPublishSync && lastExportPath) {
+        outputFolderOrFile = lastExportPath;
       } else if (shouldChooseOutputFile) {
         exportSettings.onConflict = ConflictAction.Overwrite;
         const suggestedName = await invoke<string>(Invokes.ResolveExportFileStem, {
@@ -729,7 +968,7 @@ export default function ExportPanel({
         outputFolderOrFile = isAndroid
           ? ''
           : ((await open({
-              title: t('export.dialog.selectFolderTitle', { count: numImages }),
+              title: t('export.dialog.selectFolderTitle', { count: Math.max(numImages, 1) }),
               directory: true,
               defaultPath: lastExportPath ?? undefined,
             })) as string);
@@ -758,12 +997,14 @@ export default function ExportPanel({
           status: Status.Exporting,
           exportedCount: undefined,
           skippedCount: undefined,
+          deletedCount: undefined,
         });
         await invoke(Invokes.ExportImages, {
           paths: pathsToExport,
           outputFolderOrFile: outputFolderOrFile,
           isExplicitFilePath: shouldChooseOutputFile,
           baseOriginFolders: rootPaths,
+          currentFolderPath: currentFolderPath || null,
           exportSettings,
           outputFormat: selectedFormat.extensions[0],
           currentEditPath: selectedImage?.path || null,
@@ -793,10 +1034,11 @@ export default function ExportPanel({
     }
   };
 
-  const canExport = numImages > 0 && isPadValid && isBorderValid;
+  const canExport = (numImages > 0 || pendingDeletesCount > 0) && isPadValid && isBorderValid;
   const isLut = fileFormat === FileFormats.Cube;
   const itemLabel = isLut ? t('export.labels.lut') : t('export.labels.image');
   const itemLabelPlural = isLut ? t('export.labels.lut_plural') : t('export.labels.image_plural');
+  const hasPanelContent = numImages > 0 || (isPublishSync && (allFolderPaths.length > 0 || pendingDeletesCount > 0));
 
   return (
     <div className={onClose ? 'h-full bg-bg-secondary rounded-lg flex flex-col' : 'flex flex-col h-full'}>
@@ -804,7 +1046,7 @@ export default function ExportPanel({
         <Text variant={TextVariants.title}>{t('export.title')}</Text>
       </div>
       <div className="grow overflow-y-auto p-3 space-y-8">
-        {numImages > 0 ? (
+        {hasPanelContent ? (
           <>
             <div className={isExporting ? 'opacity-50 pointer-events-none' : ''}>
               <ExportPresetsList
@@ -893,6 +1135,102 @@ export default function ExportPanel({
                       value={subfolder || ''}
                       placeholder={t('export.destination.subfolderPlaceholder')}
                     />
+                  </div>
+                )}
+
+                {isFingerprintMode && destination === 'customFolder' && !isAndroid && (
+                  <div className="flex items-center gap-2 pl-2 border-l-2 border-surface">
+                    <div
+                      className="flex-1 bg-surface rounded-md px-2.5 py-1.5 text-xs text-text-secondary truncate"
+                      data-tooltip={lastExportPath || t('export.publish.noTargetFolder')}
+                    >
+                      {lastExportPath || t('export.publish.noTargetFolder')}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSelectPublishCustomFolder}
+                      disabled={isExporting}
+                      className="px-2.5 py-1.5 bg-surface hover:bg-card-active rounded-md text-xs text-text-primary flex items-center gap-1.5 shrink-0 transition-colors"
+                      data-tooltip={t('export.publish.chooseFolder')}
+                    >
+                      <FolderOpen size={14} />
+                      <span>{t('export.publish.chooseFolderBtn')}</span>
+                    </button>
+                  </div>
+                )}
+
+                {isPublishSync && (
+                  <div className="bg-surface/80 border border-surface rounded-lg p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <Text variant={TextVariants.small} weight={TextWeights.semibold} color={TextColors.primary}>
+                        {t('export.publish.summaryTitle')}
+                      </Text>
+                      {allFolderPaths.length > 1 &&
+                        selectedPaths.length > 0 &&
+                        selectedPaths.length < allFolderPaths.length && (
+                          <button
+                            type="button"
+                            onClick={() => setPublishFullFolder((v) => !v)}
+                            className="text-[11px] px-2 py-0.5 rounded-full bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
+                          >
+                            {publishFullFolder
+                              ? t('export.publish.scopeFullFolder', { count: allFolderPaths.length })
+                              : t('export.publish.scopeSelectedOnly', { count: selectedPaths.length })}
+                          </button>
+                        )}
+                    </div>
+
+                    {publishSyncStatus?.destinationReady ? (
+                      <>
+                        <div className="grid grid-cols-2 gap-1.5 text-xs">
+                          <div className="flex items-center justify-between bg-bg-secondary/70 rounded-md px-2.5 py-1.5">
+                            <span className="flex items-center gap-1.5 text-sky-400">
+                              <PlusCircle size={13} />
+                              {t('export.publish.newLabel')}
+                            </span>
+                            <span className="font-semibold text-text-primary">{publishSyncStatus.newCount}</span>
+                          </div>
+                          <div className="flex items-center justify-between bg-bg-secondary/70 rounded-md px-2.5 py-1.5">
+                            <span className="flex items-center gap-1.5 text-amber-400">
+                              <RefreshCw size={13} />
+                              {t('export.publish.modifiedLabel')}
+                            </span>
+                            <span className="font-semibold text-text-primary">{publishSyncStatus.modifiedCount}</span>
+                          </div>
+                          <div className="flex items-center justify-between bg-bg-secondary/70 rounded-md px-2.5 py-1.5">
+                            <span className="flex items-center gap-1.5 text-rose-400">
+                              <Trash2 size={13} />
+                              {t('export.publish.deletedLabel')}
+                            </span>
+                            <span className="font-semibold text-text-primary">{publishSyncStatus.deletedCount}</span>
+                          </div>
+                          <div className="flex items-center justify-between bg-bg-secondary/70 rounded-md px-2.5 py-1.5">
+                            <span className="flex items-center gap-1.5 text-emerald-400">
+                              <CheckCircle size={13} />
+                              {t('export.publish.syncedLabel')}
+                            </span>
+                            <span className="font-semibold text-text-primary">{publishSyncStatus.syncedCount}</span>
+                          </div>
+                        </div>
+
+                        {publishSyncStatus.deletedFiles.length > 0 && (
+                          <div className="bg-rose-500/10 border border-rose-500/20 rounded-md px-2.5 py-1.5 text-[11px] text-rose-300 space-y-1">
+                            <div className="font-medium">{t('export.publish.toTrashHeader')}</div>
+                            <div className="max-h-20 overflow-y-auto space-y-0.5 text-rose-200/80">
+                              {publishSyncStatus.deletedFiles.map((df) => (
+                                <div key={df.exportedPath} className="truncate" data-tooltip={df.exportedPath}>
+                                  • {df.exportedFilename}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <Text variant={TextVariants.small} color={TextColors.secondary}>
+                        {t('export.publish.selectFolderHint')}
+                      </Text>
+                    )}
                   </div>
                 )}
               </div>
@@ -1344,7 +1682,15 @@ export default function ExportPanel({
 
       <div className="p-3 border-t border-surface shrink-0 space-y-2">
         <Text as="div" variant={TextVariants.small} color={TextColors.primary} className="text-center">
-          {isEstimating ? (
+          {status === Status.Success && deletedCount && deletedCount > 0 ? (
+            <span className="text-emerald-400 font-medium">
+              {t('export.status.detailPublishWithDeleted', {
+                exported: exportedCount ?? 0,
+                deleted: deletedCount,
+                skipped: skippedCount ?? 0,
+              })}
+            </span>
+          ) : isEstimating ? (
             <span className="italic">{t('export.status.estimatingSize')}</span>
           ) : estimatedSize !== null ? (
             <span>
@@ -1368,7 +1714,7 @@ export default function ExportPanel({
                 : status === Status.Cancelling
                   ? 'bg-yellow-500/20 text-yellow-400 shadow-none'
                   : status === Status.Success
-                    ? skippedCount && !exportedCount
+                    ? skippedCount && !exportedCount && !deletedCount
                       ? 'bg-amber-500/80 text-white shadow-none'
                       : 'bg-green-500/70 text-white shadow-none'
                     : status === Status.Error
@@ -1401,11 +1747,16 @@ export default function ExportPanel({
             ) : status === Status.Success ? (
               <>
                 <CheckCircle size={18} className="mr-2" />
-                {!skippedCount
-                  ? t('export.status.success')
-                  : exportedCount
-                    ? t('export.status.successWithSkipped', { exported: exportedCount, skipped: skippedCount })
-                    : t('export.status.allSkipped')}
+                {deletedCount && deletedCount > 0
+                  ? t('export.status.successPublishWithDeleted', {
+                      exported: exportedCount ?? 0,
+                      deleted: deletedCount,
+                    })
+                  : !skippedCount
+                    ? t('export.status.success')
+                    : exportedCount
+                      ? t('export.status.successWithSkipped', { exported: exportedCount, skipped: skippedCount })
+                      : t('export.status.allSkipped')}
               </>
             ) : status === Status.Error ? (
               <>
@@ -1415,6 +1766,31 @@ export default function ExportPanel({
               <>
                 <Ban size={18} className="mr-2" /> {t('export.status.cancelled')}
               </>
+            ) : isPublishSync && publishSyncStatus?.destinationReady ? (
+              pendingExportsCount === 0 && pendingDeletesCount === 0 ? (
+                <>
+                  <CheckCircle size={18} className="mr-2 text-emerald-300" />{' '}
+                  {t('export.publish.btnAllSynced', { count: publishSyncStatus.syncedCount })}
+                </>
+              ) : pendingDeletesCount > 0 && pendingExportsCount === 0 ? (
+                <>
+                  <Trash2 size={18} className="mr-2" />{' '}
+                  {t('export.publish.btnPublishDeletesOnly', { deleted: pendingDeletesCount })}
+                </>
+              ) : pendingDeletesCount > 0 ? (
+                <>
+                  <RefreshCw size={18} className="mr-2" />{' '}
+                  {t('export.publish.btnPublishWithDeletes', {
+                    exportCount: pendingExportsCount,
+                    deleted: pendingDeletesCount,
+                  })}
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={18} className="mr-2" />{' '}
+                  {t('export.publish.btnPublishChanges', { count: pendingExportsCount })}
+                </>
+              )
             ) : (
               <>
                 <FileInput size={18} className="mr-2" />{' '}

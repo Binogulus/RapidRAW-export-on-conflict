@@ -87,6 +87,7 @@ pub enum ConflictAction {
     CreateUnique,
     Overwrite,
     OverwriteIfChanged,
+    PublishSync,
     Skip,
 }
 

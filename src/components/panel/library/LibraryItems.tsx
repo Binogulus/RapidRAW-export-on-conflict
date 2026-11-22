@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Ban,
+  CheckCircle2,
   Flag,
   Image as ImageIcon,
   Folder,
   FolderOpen,
+  RefreshCw,
   Star as StarIcon,
   SlidersHorizontal,
   CloudOff,
@@ -75,6 +77,7 @@ const ThumbnailComponent = ({
   const ctrlClickMenuGuard = useCtrlClickMenuGuard(handleClick);
   const isAiPending = useProcessStore((s) => !!s.aiPendingPaths[path]);
   const isAiPaused = useProcessStore((s) => s.aiJobs.paused);
+  const publishState = useProcessStore((s) => s.publishItemStates[path]);
   const cloudTooltip = useLibraryStore((s) =>
     isImmichAlbumId(s.activeAlbumId) ? 'library.items.immichPlaceholder' : 'library.items.cloudPlaceholder',
   );
@@ -194,7 +197,8 @@ const ThumbnailComponent = ({
   const isRejected = flag === ImageFlag.Reject;
   const hasRating = rating > 0 && !isRejected;
   const hasGroupBadge = !!groupBadgeLabel;
-  const hasOtherBadge = hasEditIcon || hasColorLabel || hasRating || !!flag || hasGroupBadge;
+  const hasPublishBadge = publishState === 'synced' || publishState === 'modified';
+  const hasOtherBadge = hasEditIcon || hasColorLabel || hasRating || !!flag || hasGroupBadge || hasPublishBadge;
   const hasAnyOverlay = hasOtherBadge || isAiPending;
 
   return (
@@ -363,6 +367,29 @@ const ThumbnailComponent = ({
             data-tooltip={groupBadgeLabel}
           >
             <Layers size={12} className="text-white" />
+          </div>
+
+          <div
+            className={clsx(
+              'flex items-center shrink-0 transition-all duration-200 ease-out overflow-hidden',
+              hasPublishBadge ? 'max-w-4 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
+              hasPublishBadge && (hasEditIcon || hasColorLabel || hasRating || !!flag || hasGroupBadge)
+                ? 'ml-1.5'
+                : 'ml-0',
+            )}
+            data-tooltip={
+              publishState === 'synced'
+                ? t('export.publish.badgeSynced')
+                : publishState === 'modified'
+                  ? t('export.publish.badgeModified')
+                  : undefined
+            }
+          >
+            {publishState === 'synced' ? (
+              <CheckCircle2 size={12} className="text-emerald-400" />
+            ) : publishState === 'modified' ? (
+              <RefreshCw size={12} className="text-amber-400" />
+            ) : null}
           </div>
 
           <div

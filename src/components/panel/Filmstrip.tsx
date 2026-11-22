@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { Image as ImageIcon, Star, SlidersHorizontal, Loader2, Pause } from 'lucide-react';
+import { CheckCircle2, Image as ImageIcon, Star, SlidersHorizontal, Loader2, Pause, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { Grid, useGridCallbackRef } from 'react-window';
 import { useTranslation } from 'react-i18next';
@@ -65,6 +65,7 @@ const FilmstripThumbnail = memo(
     const ctrlClickMenuGuard = useCtrlClickMenuGuard((e) => onImageSelect?.(imageFile.path, e));
     const isAiPending = useProcessStore((s) => !!s.aiPendingPaths[imageFile.path]);
     const isAiPaused = useProcessStore((s) => s.aiJobs.paused);
+    const publishState = useProcessStore((s) => s.publishItemStates[imageFile.path]);
 
     const [layers, setLayers] = useState<ImageLayer[]>([]);
 
@@ -101,7 +102,8 @@ const FilmstripThumbnail = memo(
     const hasColorLabel = !!colorLabel;
     const isRejected = flag === ImageFlag.Reject;
     const hasRating = rating > 0 && !isRejected;
-    const hasOtherBadge = hasEditIcon || hasColorLabel || hasRating || !!flag;
+    const hasPublishBadge = publishState === 'synced' || publishState === 'modified';
+    const hasOtherBadge = hasEditIcon || hasColorLabel || hasRating || !!flag || hasPublishBadge;
     const hasAnyOverlay = hasOtherBadge || isAiPending;
 
     const cleanPath = path.split('?')[0];
@@ -291,6 +293,27 @@ const FilmstripThumbnail = memo(
             </div>
 
             <FlagBadges flag={flag} hasPrecedingBadge={hasEditIcon || hasColorLabel || hasRating} />
+
+            <div
+              className={clsx(
+                'flex items-center shrink-0 transition-all duration-200 ease-out overflow-hidden',
+                hasPublishBadge ? 'max-w-4 opacity-100 scale-100' : 'max-w-0 opacity-0 scale-75 pointer-events-none',
+                hasPublishBadge && (hasEditIcon || hasColorLabel || hasRating || !!flag) ? 'ml-1.5' : 'ml-0',
+              )}
+              data-tooltip={
+                publishState === 'synced'
+                  ? t('export.publish.badgeSynced')
+                  : publishState === 'modified'
+                    ? t('export.publish.badgeModified')
+                    : undefined
+              }
+            >
+              {publishState === 'synced' ? (
+                <CheckCircle2 size={12} className="text-emerald-400" />
+              ) : publishState === 'modified' ? (
+                <RefreshCw size={12} className="text-amber-400" />
+              ) : null}
+            </div>
 
             <div
               className={clsx(
