@@ -216,6 +216,9 @@ export function useTauriListeners({
         if (nextImageList) update.imageList = nextImageList;
         libraryState.setLibrary(update);
       }
+      if (editPaths.length > 0) {
+        useProcessStore.getState().bumpPublishSyncRevision();
+      }
     };
 
     const scheduleFlush = () => {
@@ -347,13 +350,15 @@ export function useTauriListeners({
       listen('batch-export-progress', (event: any) => {
         if (isEffectActive) useProcessStore.getState().setExportState({ progress: event.payload });
       }),
-      listen<{ exported: number; skipped: number }>('export-complete', (event) => {
+      listen<{ exported: number; skipped: number; deleted?: number }>('export-complete', (event) => {
         if (!isEffectActive) return;
         useProcessStore.getState().setExportState({
           status: Status.Success,
           exportedCount: event.payload.exported,
           skippedCount: event.payload.skipped,
+          deletedCount: event.payload.deleted,
         });
+        useProcessStore.getState().bumpPublishSyncRevision();
         refreshAfterExport();
       }),
       listen('export-error', (event: any) => {

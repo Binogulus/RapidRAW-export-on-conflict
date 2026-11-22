@@ -190,6 +190,7 @@ pub fn parse_launch_args(args: &[String]) -> LaunchRequest {
                             "keepboth" => ConflictAction::CreateUnique,
                             "overwrite" => ConflictAction::Overwrite,
                             "overwriteifchanged" => ConflictAction::OverwriteIfChanged,
+                            "publishsync" | "sync" => ConflictAction::PublishSync,
                             "skip" => ConflictAction::Skip,
                             _ => {
                                 return LaunchRequest::InvalidHeadless(format!(

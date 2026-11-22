@@ -73,7 +73,27 @@ export enum ConflictAction {
   CreateUnique = 'createUnique',
   Overwrite = 'overwrite',
   OverwriteIfChanged = 'overwriteIfChanged',
+  PublishSync = 'publishSync',
   Skip = 'skip',
+}
+
+export type PublishItemState = 'new' | 'modified' | 'synced';
+
+export interface DeletedPublishEntry {
+  sourcePath: string;
+  exportedPath: string;
+  exportedFilename: string;
+}
+
+export interface PublishSyncStatus {
+  destinationReady: boolean;
+  destinationPath: string | null;
+  newCount: number;
+  modifiedCount: number;
+  syncedCount: number;
+  deletedCount: number;
+  deletedFiles: DeletedPublishEntry[];
+  itemStates: Record<string, PublishItemState>;
 }
 
 export interface ExportSettings {
@@ -149,6 +169,8 @@ export interface ExportState {
   status: Status;
   exportedCount?: number;
   skippedCount?: number;
+  deletedCount?: number;
+  totalCount?: number;
 }
 
 export interface FileFormat {

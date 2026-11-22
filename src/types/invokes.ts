@@ -28,6 +28,7 @@ export enum Invokes {
   EstimateExportSizes = 'estimate_export_sizes',
   ExportImages = 'export_images',
   ResolveExportFileStem = 'resolve_export_file_stem',
+  GetPublishSyncStatus = 'get_publish_sync_status',
   FrontendLog = 'frontend_log',
   GenerateAiForegroundMask = 'generate_ai_foreground_mask',
   GenerateAiSkyMask = 'generate_ai_sky_mask',

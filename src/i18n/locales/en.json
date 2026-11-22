@@ -1023,6 +1023,7 @@
       "label": "If file exists",
       "overwrite": "Overwrite",
       "overwriteIfChanged": "Overwrite if changed",
+      "publishSync": "Synchronize / Publish (update & clean deleted)",
       "skip": "Skip"
     },
     "destination": {
@@ -1083,6 +1084,26 @@
       "pixels": "pixels",
       "resizeToFit": "Resize to Fit"
     },
+    "publish": {
+      "badgeModified": "Modified since last publish (needs update)",
+      "badgeSynced": "Published and synchronized",
+      "btnAllSynced": "All Synchronized ({{count}})",
+      "btnPublishChanges": "Publish {{count}} Image(s)",
+      "btnPublishDeletesOnly": "Publish ({{deleted}} to Trash)",
+      "btnPublishWithDeletes": "Publish ({{exportCount}} export, {{deleted}} trash)",
+      "chooseFolder": "Choose target publish folder",
+      "chooseFolderBtn": "Folder…",
+      "deletedLabel": "To Trash",
+      "modifiedLabel": "Modified",
+      "newLabel": "New",
+      "noTargetFolder": "No destination folder selected",
+      "scopeFullFolder": "Folder ({{count}})",
+      "scopeSelectedOnly": "Selected ({{count}})",
+      "selectFolderHint": "Select a destination folder to inspect publish synchronization status.",
+      "summaryTitle": "Publish Synchronization",
+      "syncedLabel": "Synced",
+      "toTrashHeader": "Exported files to move to Trash (RAW deleted):"
+    },
     "sections": {
       "advanced": "Advanced",
       "destination": "Destination",
@@ -1097,6 +1118,7 @@
       "cancelExport": "Cancel Export",
       "cancelled": "Export cancelled",
       "cancelling": "Cancelling export…",
+      "detailPublishWithDeleted": "{{exported}} exported, {{deleted}} moved to trash, {{skipped}} unchanged",
       "estimatedAverageSize": " ({{size}} avg)",
       "estimatedSize": "Estimated file size: ~{{size}}",
       "estimatedTotalSize": "Estimated total size: ~{{size}}",
@@ -1111,6 +1133,7 @@
       "noImageSelected": "No image selected for export.",
       "noImagesSelected": "No images selected.",
       "success": "Export successful!",
+      "successPublishWithDeleted": "{{exported}} exported, {{deleted}} trashed",
       "successWithSkipped": "{{exported}} exported, {{skipped}} skipped"
     },
     "title": "Export",

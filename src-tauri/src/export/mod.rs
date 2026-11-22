@@ -3,6 +3,7 @@ pub mod gain_map;
 pub mod geometry;
 pub mod masks;
 pub mod original;
+pub mod publish;
 pub mod records;
 pub mod settings;
 pub mod size_estimate;
@@ -289,6 +290,7 @@ pub(crate) async fn export_images_impl(
     output_folder_or_file: String,
     is_explicit_file_path: bool,
     base_origin_folders: Vec<String>,
+    current_folder_path: Option<String>,
     export_settings: ExportSettings,
     output_format: String,
     adjustments_mode: ExportAdjustmentsMode,
@@ -339,7 +341,7 @@ pub(crate) async fn export_images_impl(
         (available_ram as f64 * memory_limit as f64 / 100.0) as u64,
     );
 
-    let num_threads = if paths.len() == 1 {
+    let num_threads = if paths.len() <= 1 {
         1
     } else {
         match app_settings.export_worker_threads {
@@ -361,6 +363,19 @@ pub(crate) async fn export_images_impl(
         let output_folder_path = std::path::Path::new(&output_folder_or_file);
         let total_paths = paths.len();
         let settings = load_settings(app_handle.clone()).unwrap_or_default();
+
+        let (target_dest_dirs, active_source_dirs) =
+            if export_settings.on_conflict == Some(ConflictAction::PublishSync) {
+                publish::collect_target_and_source_dirs(
+                    &paths,
+                    current_folder_path.as_deref(),
+                    &output_folder_or_file,
+                    &base_origin_folders,
+                    &export_settings,
+                )
+            } else {
+                Default::default()
+            };
 
         let mut copy_counts: HashMap<PathBuf, usize> = HashMap::new();
         let export_items: Vec<_> = paths
@@ -585,17 +600,20 @@ pub(crate) async fn export_images_impl(
                         }
                     };
                     hydrate_adjustments(&state, &mut js_adjustments);
-                    let fingerprint =
-                        (on_conflict == ConflictAction::OverwriteIfChanged).then(|| {
-                            export_records.fingerprint(
-                                &source_path,
-                                &js_adjustments,
-                                &output_format,
-                                &export_settings,
-                                &settings,
-                                is_raw,
-                            )
-                        });
+                    let use_fingerprint = matches!(
+                        on_conflict,
+                        ConflictAction::OverwriteIfChanged | ConflictAction::PublishSync
+                    );
+                    let fingerprint = use_fingerprint.then(|| {
+                        export_records.fingerprint(
+                            &source_path,
+                            &js_adjustments,
+                            &output_format,
+                            &export_settings,
+                            &settings,
+                            is_raw,
+                        )
+                    });
                     Ok((sidecar, js_adjustments, fingerprint))
                 };
 
@@ -607,7 +625,12 @@ pub(crate) async fn export_images_impl(
                 };
 
                 let mut loaded = None;
-                if outputs_exist && on_conflict == ConflictAction::OverwriteIfChanged {
+                if outputs_exist
+                    && matches!(
+                        on_conflict,
+                        ConflictAction::OverwriteIfChanged | ConflictAction::PublishSync
+                    )
+                {
                     let prepared = load_adjustments()?;
                     if is_unchanged(&prepared.2) {
                         return skip();
@@ -853,8 +876,20 @@ pub(crate) async fn export_images_impl(
                 })();
 
                 if result.is_ok() {
+                    let orig_out = export_original.then(|| original_output_path(&output_path));
                     match fingerprint {
-                        Some(fingerprint) => export_records.record(&output_path, fingerprint),
+                        Some(fingerprint) => {
+                            publish::record_published_export(
+                                &app_handle_clone,
+                                &image_path_str,
+                                &source_path,
+                                &output_path,
+                                orig_out.as_deref(),
+                                &fingerprint,
+                                on_conflict == ConflictAction::PublishSync,
+                            );
+                            export_records.record(&output_path, fingerprint);
+                        }
                         None => export_records.forget(&output_path),
                     }
                 }
@@ -879,12 +914,27 @@ pub(crate) async fn export_images_impl(
             }
         }
 
-        let records = Arc::clone(&export_records);
-        let _ = tokio::task::spawn_blocking(move || records.save()).await;
-
         let errors: Vec<String> = results.into_iter().filter_map(Result::err).collect();
         let error_count = errors.len();
         let skipped_count = skipped_counter.load(Ordering::SeqCst);
+
+        let deleted_count = if !cancellation_token.load(Ordering::SeqCst)
+            && error_count == 0
+            && export_settings.on_conflict == Some(ConflictAction::PublishSync)
+        {
+            publish::trash_orphan_exports(
+                &app_handle,
+                &export_records,
+                &target_dest_dirs,
+                &active_source_dirs,
+            )
+        } else {
+            0
+        };
+
+        let records = Arc::clone(&export_records);
+        let _ = tokio::task::spawn_blocking(move || records.save()).await;
+
         let export_state = app_handle.state::<AppState>();
         let finalized = finish_export_task(
             &export_state.export_task_token,
@@ -918,6 +968,7 @@ pub(crate) async fn export_images_impl(
                         serde_json::json!({
                             "exported": total_paths.saturating_sub(skipped_count),
                             "skipped": skipped_count,
+                            "deleted": deleted_count,
                         }),
                     );
                 }
@@ -958,6 +1009,7 @@ pub(crate) async fn export_images_and_wait(
         output_folder_or_file,
         is_explicit_file_path,
         base_origin_folders,
+        None,
         export_settings,
         output_format,
         adjustments_mode,
@@ -974,7 +1026,7 @@ pub(crate) async fn export_images_and_wait(
     }
 }
 
-fn export_file_stem(
+pub(crate) fn export_file_stem(
     filename_template: Option<&str>,
     source_path: &std::path::Path,
     sequence: usize,
@@ -1014,6 +1066,7 @@ pub async fn export_images(
     output_folder_or_file: String,
     is_explicit_file_path: bool,
     base_origin_folders: Vec<String>,
+    current_folder_path: Option<String>,
     export_settings: ExportSettings,
     output_format: String,
     current_edit_path: Option<String>,
@@ -1026,6 +1079,7 @@ pub async fn export_images(
         output_folder_or_file,
         is_explicit_file_path,
         base_origin_folders,
+        current_folder_path,
         export_settings,
         output_format,
         ExportAdjustmentsMode::UseSidecars {
@@ -1191,7 +1245,7 @@ fn strip_prefix_preserving_source_case(source_path: &Path, base_path: &Path) -> 
     Some(source_components[base_components.len()..].iter().collect())
 }
 
-fn relative_export_dir_for_preserved_folders(
+pub(crate) fn relative_export_dir_for_preserved_folders(
     source_path: &Path,
     base_origin_folders: &[String],
 ) -> Option<PathBuf> {

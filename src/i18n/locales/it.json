@@ -1048,6 +1048,7 @@
       "label": "Se il file esiste",
       "overwrite": "Sovrascrivi",
       "overwriteIfChanged": "Sovrascrivi se modificata",
+      "publishSync": "Sincronizza / Pubblica (aggiorna e cestina eliminati)",
       "skip": "Salta"
     },
     "destination": {
@@ -1109,6 +1110,26 @@
       "pixels": "pixel",
       "resizeToFit": "Ridimensiona per Adattare"
     },
+    "publish": {
+      "badgeModified": "Modificata dopo la pubblicazione (da aggiornare)",
+      "badgeSynced": "Pubblicata e sincronizzata",
+      "btnAllSynced": "Tutto Sincronizzato ({{count}})",
+      "btnPublishChanges": "Pubblica {{count}} Immagine(i)",
+      "btnPublishDeletesOnly": "Pubblica ({{deleted}} da cestinare)",
+      "btnPublishWithDeletes": "Pubblica ({{exportCount}} esporta, {{deleted}} cestina)",
+      "chooseFolder": "Scegli la cartella di pubblicazione",
+      "chooseFolderBtn": "Cartella…",
+      "deletedLabel": "Da cestinare",
+      "modifiedLabel": "Modificate",
+      "newLabel": "Nuove",
+      "noTargetFolder": "Nessuna cartella di destinazione selezionata",
+      "scopeFullFolder": "Cartella ({{count}})",
+      "scopeSelectedOnly": "Selezionate ({{count}})",
+      "selectFolderHint": "Seleziona una cartella di destinazione per verificare lo stato di sincronizzazione.",
+      "summaryTitle": "Sincronizzazione Pubblicazione",
+      "syncedLabel": "Sincronizzate",
+      "toTrashHeader": "File esportati da spostare nel Cestino (RAW eliminato):"
+    },
     "sections": {
       "advanced": "Avanzate",
       "destination": "Destinazione",
@@ -1123,6 +1144,7 @@
       "cancelExport": "Annulla Esportazione",
       "cancelled": "Esportazione annullata",
       "cancelling": "Annullamento esportazione…",
+      "detailPublishWithDeleted": "{{exported}} esportate, {{deleted}} nel cestino, {{skipped}} invariate",
       "estimatedAverageSize": " ({{size}} media)",
       "estimatedSize": "Dimensione file stimata: ~{{size}}",
       "estimatedTotalSize": "Dimensione totale stimata: ~{{size}}",
@@ -1138,6 +1160,7 @@
       "noImageSelected": "Nessuna immagine selezionata per l'esportazione.",
       "noImagesSelected": "Nessuna immagine selezionata.",
       "success": "Esportazione completata con successo!",
+      "successPublishWithDeleted": "{{exported}} esportate, {{deleted}} cestinate",
       "successWithSkipped": "{{exported}} esportate, {{skipped}} saltate"
     },
     "title": "Esporta",

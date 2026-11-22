@@ -698,6 +698,7 @@ pub fn run() {
             decode::image_loader::is_image_cached,
             decode::image_preload::preload_images,
             export::export_images,
+            export::publish::get_publish_sync_status,
             export::resolve_export_file_stem,
             export::tasks::cancel_export,
             export::size_estimate::estimate_export_sizes,
