@@ -39,6 +39,33 @@ export const isUniqueFilenameTemplate = (template: string): boolean =>
 
 export type TiffBitDepth = 8 | 16;
 
+export enum ExportColorSpace {
+  Srgb = 'srgb',
+  DisplayP3 = 'displayP3',
+  AdobeRgb = 'adobeRgb',
+  ProPhotoRgb = 'proPhotoRgb',
+  Rec2020 = 'rec2020',
+}
+
+export const EXPORT_COLOR_SPACES: Array<{ label: string; value: ExportColorSpace }> = [
+  { label: 'sRGB', value: ExportColorSpace.Srgb },
+  { label: 'Display P3', value: ExportColorSpace.DisplayP3 },
+  { label: 'Adobe RGB', value: ExportColorSpace.AdobeRgb },
+  { label: 'ProPhoto RGB', value: ExportColorSpace.ProPhotoRgb },
+  { label: 'Rec. 2020', value: ExportColorSpace.Rec2020 },
+];
+
+export const COLOR_SPACE_FILE_FORMATS: Array<string> = [
+  FileFormats.Jpeg,
+  FileFormats.Png,
+  FileFormats.Tiff,
+  FileFormats.Webp,
+  FileFormats.Jxl,
+];
+
+export const HDR_FILE_FORMATS: Array<string> = [FileFormats.Jpeg, FileFormats.Jxl];
+export const DEFAULT_HDR_HEADROOM = 2;
+
 export const DEFAULT_EXPORT_DPI = 96;
 export const MAX_EXPORT_DPI = 65535;
 
@@ -53,6 +80,9 @@ export interface ExportSettings {
   filenameTemplate: string | null;
   jpegQuality: number;
   tiffBitDepth: TiffBitDepth;
+  colorSpace: ExportColorSpace;
+  hdr: boolean;
+  hdrHeadroom: number;
   keepMetadata: boolean;
   preserveTimestamps: boolean;
   resize: {
@@ -113,12 +143,12 @@ interface WatermarkSettings {
 
 export interface ExportState {
   destination?: string | null;
+  isOriginalFolder?: boolean;
   errorMessage: string;
   progress: Progress;
   status: Status;
   exportedCount?: number;
   skippedCount?: number;
-  totalCount?: number;
 }
 
 export interface FileFormat {
@@ -151,6 +181,9 @@ export interface ExportPreset {
   fileFormat: string;
   jpegQuality: number;
   tiffBitDepth?: TiffBitDepth;
+  colorSpace?: ExportColorSpace;
+  hdr?: boolean;
+  hdrHeadroom?: number;
   dpi?: number;
   enableResize: boolean;
   resizeMode: string;
