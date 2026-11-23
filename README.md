@@ -17,9 +17,131 @@
 
 </div>
 
-# RapidRAW
+# RapidRAW — Map View & Interactive Geotagging
 
-> A beautiful, non-destructive, and GPU-accelerated RAW image editor built with performance in mind.
+> Native geospatial catalog exploration, interactive photo-stack clustering, and non-destructive drag-and-drop geotagging for RapidRAW.
+
+This repository serves as a public staging and development branch maintained by **[Binogulus](https://github.com/Binogulus)** to propose the native **Map View** feature upstream to **[RapidRAW](https://github.com/CyberTimon/RapidRAW)** (created by [Timon Käch / @CyberTimon](https://github.com/CyberTimon)).
+
+---
+
+## 🗺️ Map View: Overview
+
+**Map View** is integrated directly into RapidRAW's Library workspace as the **4th display mode** alongside **Grid**, **List**, and **Culling**. It provides photographers with a fast, distraction-free geospatial workflow to explore geotagged catalogs, browse stacked photo clusters directly on the canvas, assign or adjust GPS coordinates via drag-and-drop, and jump straight into editing—while keeping original RAW files 100% untouched.
+
+<div align="center">
+
+| 📍 **4th Library Display Mode** | 📸 **Interactive Photo Clusters** | 🧭 **Drag & Drop Geotagging** |
+| :---: | :---: | :---: |
+| Native view switcher integration with smart auto-centering on active selection | Physical stacked photo cards with mouse-wheel & click-to-cycle browsing | Resizable Culling-style **Unlocated** dock for single & batch GPS placement |
+
+| 🔗 **Unified Workspace & Editing** | 💾 **Non-Destructive Sidecars** | 🛰️ **3 Switchable Basemaps** |
+| :---: | :---: | :---: |
+| Instant Info sidebar sync, double-click to **Adjustments** & native context menu | `.rrdata` & `.xmp` persistence, `Ctrl+Z` undo & unified **Reset Adjustments** | **Dark OSM** (darkroom theme), **Standard OSM** & **Esri World Imagery** |
+
+</div>
+
+---
+
+## ✨ Architecture & Feature Breakdown
+
+### 1. Native Library & Workspace Integration
+* **Seamless Display Mode Switching**: Switch between **Grid**, **List**, **Culling**, and **Map View** from the Library header with a single click.
+* **Smart Auto-Focus on Entry**: Entering Map View with a photo already selected in Grid, List, Culling, or the Editor automatically centers and zooms the map onto that image's coordinates.
+* **Full Selection, Sidebar & Editor Synchronization**:
+  * **Single-click** (with full support for `Ctrl/Cmd+Click` toggle and `Shift+Click` range selection) selects pins on the map and immediately updates the right-hand **Info & Metadata** panel—without intrusive popups covering the map canvas.
+  * **Double-click** on any photo pin or cluster opens the active image directly in the **Adjustments** editor.
+  * **Right-click** on any pin or dock card opens **RapidRAW's standard application context menu** (ratings, color labels, flags, albums, export, reset adjustments, etc.).
+
+### 2. Interactive Photographic Clusters (Stacked Photo Cards)
+Instead of generic numeric bubbles or cluttered spiderfied lines, grouped photos are rendered as **physical photo stacks** (`96×96px` front card with tilted `-3°` and `+4°` background cards) that can be browsed and manipulated directly in place:
+* **Mouse-Wheel Stack Cycling**: Hover the cursor over any cluster and scroll the mouse wheel forward or backward to flip through all photos inside the stack in real time—without zooming the map. The top-right badge dynamically switches from the total count (`12`) to the active index (`3/12`), instantly updating the front thumbnail and synchronizing the **Info & Metadata** panel.
+* **Background Card Click-to-Cycle**: Clicking directly on the tilted background cards (`-3°` or `+4°`) brings the next photo in the stack to the front.
+* **Direct Actions on the Active Cluster Photo**: Every action performed on a cluster's front card targets the currently displayed photo—single-click selection (with `z-index` foreground elevation), double-click to edit in **Adjustments**, right-click for the native context menu, or drag-and-drop to reposition.
+* **Clean Thumbnail Pins & Compact Mode**: Individual markers render as clean, border-only `96×96px` thumbnail cards (`96×106px` with directional GPS pointer) without cluttering file-format overlays, or can be toggled to **Compact Circular Pins** from the map toolbar.
+
+### 3. Interactive Geotagging & Unlocated Photos Dock
+* **Resizable "Unlocated" Dock**: A collapsible right-hand dock lists all photos in the current folder/album that lack GPS coordinates. Cards match the **Culling** view aesthetic (complete aspect-ratio thumbnails, filename labels below, and hover EXIF overlays) and scale smoothly in real time as the dock is resized.
+* **Precision Single & Batch Drag-and-Drop**: Drag one or multiple selected photos (`Ctrl/Cmd+Click`, `Shift+Click`, or *Select All*) from the Unlocated dock onto the map. Coordinates are resolved at the exact cursor tip (`clientX` / `clientY`), and dropping back onto the dock safely cancels the operation.
+* **Direct Marker Repositioning**:
+  * Drag any existing photo pin or cluster across the map (with a floating thumbnail drag avatar and multi-selection counter badge) to fine-tune or update its GPS coordinates.
+  * Alternatively, right-click anywhere on the map canvas to place or reposition all currently selected photos at that exact spot.
+
+### 4. Non-Destructive Persistence
+* **100% Immutable Source Files**: Original RAW and image binaries are never modified. GPS coordinates are persisted in RapidRAW's `.rrdata` sidecars (and cached in `.rrcache`), and automatically synchronized to standard `.xmp` sidecar files (`exif:GPSLatitude`, `exif:GPSLongitude`) when XMP sync is enabled.
+* **Multi-Step GPS Undo (`Ctrl+Z`)**: A dedicated in-map Undo history stack allows instant rollback of geotagging and repositioning actions via the map toolbar button or `Ctrl+Z` / `Cmd+Z`.
+* **Unified with "Reset Adjustments"**: GPS edits are seamlessly integrated with RapidRAW's native **Reset Adjustments** command (accessible via the application context menu or Editor Controls panel). Resetting an image's adjustments also restores its original camera EXIF GPS coordinates—or returns the photo to the **Unlocated** dock if it originally had no camera GPS.
+
+### 5. Switchable Map Styles & Zero-Cost Thumbnail Performance
+* **3 Switchable Map Layers**: Choose between **Dark OSM** (custom darkroom CSS filter tailored for photo editing), **Standard OpenStreetMap**, and **Satellite (Esri World Imagery)**, with user preference persisted in `localStorage`.
+* **Zero-Cost Session Thumbnail Reuse**: Map View reuses thumbnails already cached in memory (`mediumThumbnails` / `thumbnails`) with zero disk or Rust overhead, lazy-loading only 1 representative thumbnail per visible cluster on demand and updating clusters in $O(1)$ via `refreshClusters()`.
+* **Smooth Fractional Zoom & Coordinate Hygiene**: Smooth wheel zoom (`zoomSnap: 0.25`) and automatic rejection of invalid "Null Island" coordinates ($< 0.0001^\circ$).
+
+---
+
+## 📸 Visual Walkthrough
+
+#### 1. Native Library Switcher
+<p align="center">
+  <img src="docs/screenshots/01-library-map-switcher.png" alt="Library Display Mode Switcher with Map View" width="100%">
+</p>
+<p align="center"><em>Map View integrated into the Library display mode switcher alongside Grid, List, and Culling, with automatic zoom and centering on the selected image.</em></p>
+
+#### 2. Switchable Style Maps and ON/OFF Thumbnails 
+<p align="center">
+  <img src="docs/screenshots/02-macro-clusters-overview.png" alt="You can switch Basemaps and turn on/off Thumbnails " width="100%">
+</p>
+<p align="center"><em>Stacked photo clusters with item count badges, real-time mouse-wheel / card-click cycling (`1/N`), and instant synchronization with the right-hand Info & Metadata sidebar.</em></p>
+
+#### 3. Unlocated Photos Dock & Drag-and-Drop Geotagging
+<p align="center">
+  <img width="2313" height="1253" alt="Screenshot from 2026-10-21 11-28-17" src="https://github.com/user-attachments/assets/66d38f48-17a3-42cf-8d9b-9a9b70abb0a3" />
+</p>
+<p align="center"><em>Collapsible, resizable Unlocated dock with Culling-style thumbnail cards and precision single or multi-photo drag-and-drop placement onto the map.</em></p>
+
+#### 4.Native Context Menu
+<p align="center">
+  <img width="1650" height="1104" alt="Screenshot from 2026-10-21 13-20-21" src="https://github.com/user-attachments/assets/2a8ddb8b-a9cc-4f05-93a4-18fe7e28d1c4" />
+</p>
+<p align="center"><em>Full integration with RapidRAW's native context menu and Adjustments.</em></p>
+
+---
+
+## 🚀 Try it
+
+The download links further down are the official upstream RapidRAW releases (without Map View). You can try this fork in two ways:
+
+#### Option 1 — Build from Source
+With [Rust](https://www.rust-lang.org/tools/install) and [Node.js](https://nodejs.org/) installed:
+
+```bash
+git clone https://github.com/Binogulus/RapidRAW-map-view.git
+cd RapidRAW-map-view
+npm install
+npm run tauri build
+./src-tauri/target/release/RapidRAW
+```
+
+*(For quick development testing without creating a release bundle, you can also run `npm start` instead of `npm run tauri build`.)*
+
+#### Option 2 — Ready-Made CI Test Builds (Windows, macOS, Linux)
+Pre-built packages for **Linux** (`.AppImage`, `.deb`), **Windows** (`.exe`, `.msi`), and **macOS** (`.dmg` for Apple Silicon) are automatically compiled from the `main` branch:
+1. Open the **[Build Multi-OS (Private Test)](https://github.com/Binogulus/RapidRAW-map-view/actions/workflows/build-test-artifacts.yml?query=branch%3Amain)** workflow on GitHub Actions (requires being signed into a GitHub account to download artifacts).
+2. Click the latest successful run on `main` and scroll down to the **Artifacts** section at the bottom of the page.
+
+---
+
+Once launched, open any folder or album in the **Library** and click the **Map View** icon (4th button in the top display-mode switcher, next to *Grid*, *List*, and *Culling*).
+
+The fork shares its settings, presets, albums, and `.rrdata` sidecars with an installed RapidRAW, and only one of the two can run at a time. Please report any issues with Map View here in this fork, not upstream.
+
+### 🤝 Upstream Project & Attribution
+
+RapidRAW is created and maintained by **[Timon Käch (@CyberTimon)](https://github.com/CyberTimon/RapidRAW)**. This branch is dedicated to contributing the Map View and non-destructive geotagging workflow upstream into the official RapidRAW codebase.
+
+---
+
+<sub>Everything below is the README of RapidRAW itself.</sub>
 
 RapidRAW is a modern, high-performance alternative to Adobe Lightroom®. It delivers a simple, beautiful editing experience in a lightweight package for Windows, macOS, Linux, and Android.
 
@@ -57,9 +179,20 @@ RapidRAW is for photographers who love to edit their photos in a <strong>clean, 
 <details>
 <summary><strong>Recent Changes</strong></summary>
 
+- **2026-11-22:** Made AgX reach pure white at the sensor's clipping point, made the crop panel show the whole image when opened and restore the zoom when closed, and kept the arrow keys for switching photos in the crop panel
+- **2026-11-21:** Added HEIC support on Windows and macOS, export conflict handling that can skip unchanged photos, automatic hot and dead pixel removal and live preset previews on hover, kept full precision in 16-bit TIFF exports, removed the grid patterns AI denoise left in shadows, and moved Frame Editor and Collage into the Merge menu
+- **2026-11-20:** Rewrote HDR merge and focus stacking on the new merge engine, with RAW merges saved as float DNGs and automatic deghosting, added AVIF decoding, opened gain map, PQ and HLG photos as HDR, added the HDR preview on Linux Wayland, retried the GPU backend after a crash instead of switching to OpenGL for good, and fixed blank windows with NVIDIA on X11
+- **2026-11-19:** Fixed RCD estimating green too dark near black, as found by Hanno Schwalm for darktable
+- **2026-11-18:** Added monitor color management with automatic profile detection, an HDR preview button in the editor toolbar, a CPU fallback for RAW decoding, undo history for the last 20 edited photos and Swedish translation, and fixed the black background on the OpenGL and DirectX 12 backends
+- **2026-11-17:** Moved the color pipeline to a Rec. 2020 working space, rewrote AgX as a port of darktable's AgX, and added HDR export (JPEG with a gain map, JPEG XL in PQ) and export color spaces (sRGB, Display P3, Adobe RGB, ProPhoto RGB and Rec. 2020)
+- **2026-11-16:** Rewrote the panorama stitcher with bundle adjustment, lens distortion and exposure correction, graph-cut seams, multi-band blending, projections, boundary warp and auto crop
 - **2026-11-15:** Made sharpening halo-free and independent of exposure, and fixed stepped soft edges under highlights and the other tone sliders
 - **2026-11-14:** Docked the filmstrip into the side panels as a vertical grid, added six library thumbnail sizes, added crop rotation by dragging around the frame, rebuilt contrast around each photo's own midtone, kept RAW metadata in JPEG XL exports, added camera make and model to the metadata panel, and made the AI denoise and RapidRes cache about three times smaller
 - **2026-11-13:** Added default adjustments with per-camera presets and automatic lens correction, and kept zooming smooth while a RAW file loads
+
+<details>
+<summary><strong>Expand further</strong></summary>
+
 - **2026-11-12:** Retuned the tone sliders, improved generative fill edges and cloud inpainting, fixed AI masks on Linux systems with a decimal comma locale, and fixed renames that left sidecar files behind
 - **2026-11-11:** Added RapidRes, a 2x AI super resolution fine-tuned on RapidRAW's own RAW pipeline, and removed green checkerboard artifacts in bright flat areas like snow
 - **2026-11-10:** Moved demosaicing to the GPU with RCD for Bayer and Markesteijn for X-Trans, reworked highlights, shadows, whites, blacks, clarity and structure with stronger highlight recovery, and rebuilt the color grading wheels in OKLab
@@ -67,10 +200,6 @@ RapidRAW is for photographers who love to edit their photos in a <strong>clean, 
 - **2026-11-07:** Rebuilt glow, halation and lens flare with realistic glare and aperture ghosts, rebuilt film grain, convert embedded ICC profiles of non-RAW images to sRGB, render previews at the real display size, added the option to export the original alongside edits, and fixed Olympus ORF white balance
 - **2026-11-06:** Added an interface scale setting for a compact UI, and fixed macOS context menus and canvas flicker when switching images
 - **2026-11-05:** Reworked lens correction to match Lensfun exactly with per-image lens profiles, moved relight, fog, lens blur and all transforms to the GPU, added next/previous image preloading and interactive 3D depth views
-
-<details>
-<summary><strong>Expand further</strong></summary>
-
 - **2026-11-04:** Fixed macOS local network access with ad-hoc signing, Let's Encrypt certificates on Android, and export panel validation
 - **2026-11-03:** Added Match Brush mask with adaptive color, tone and texture matching, and reworked liquify and retouch with frequency separation smoothing
 - **2026-11-02:** Added Motion Blur with panning, moving subject, spin and depth parallax, reworked clone and heal with automatic source matching, enabled the GPU renderer on Linux Wayland, and added EXIF and ICC metadata to TIFF exports
@@ -575,12 +704,13 @@ Explore example edits processed entirely within RapidRAW. You can download the `
       <h4>Core Editing Engine</h4>
       <ul>
         <li><strong>Furka Engine:</strong> GPU demosaicing (RCD for Bayer, Markesteijn for X-Trans), strong highlight recovery, and halo-free, edge-aware tone sliders in a floating-point WGSL pipeline for instant feedback.</li>
+        <li><strong>Wide Gamut & HDR:</strong> Edits in a linear Rec. 2020 working space, with color management for your monitor, an HDR preview on HDR screens, and HDR export.</li>
         <li><strong>Layered Masking:</strong> AI subject, sky, foreground, depth, text prompt, and face part masks, a Match Brush that follows similar colors and textures, and parametric color and luminance masks.</li>
         <li><strong>Retouching Tools:</strong> Clone, Heal, Retouch, and Liquify tools for dust removal, skin smoothing, and reshaping.</li>
         <li><strong>Noise Reduction:</strong> Non-destructive AI Denoise, classic BM3D denoise, and manual luma and color noise reduction.</li>
         <li><strong>RapidRes:</strong> 2x AI super resolution fine-tuned on RapidRAW's own RAW pipeline, for real extra detail without fake texture.</li>
         <li><strong>Generative Edits:</strong> Remove or add elements using text prompts, powered by an optional AI backend.</li>
-        <li><strong>Full RAW Support:</strong> Supports a wide range of RAW camera formats through rawler, with JPEG support included.</li>
+        <li><strong>Full RAW Support:</strong> Supports a wide range of RAW camera formats through rawler, plus JPEG, TIFF, AVIF, JPEG XL and more (HEIC on Windows and macOS).</li>
         <li><strong>Non-Destructive Workflow:</strong> All edits are stored in a <code>.rrdata</code> sidecar file, leaving your original images untouched.</li>
         <li><strong>Lens Correction:</strong> Automatic distortion, TCA, and vignette correction powered by Lensfun.</li><br><br>
       </ul>
@@ -618,16 +748,16 @@ Explore example edits processed entirely within RapidRAW. You can download the `
     <td valign="top" width="50%" style="border-top: 1px solid #444; padding-top: 12px;">
       <h4>Productivity & UI</h4>
       <ul>
-        <li><strong>Preset System:</strong> Create, save, import, share, and adjust preset intensity.</li>
+        <li><strong>Preset System:</strong> Create, save, import, share, preview on hover, and adjust preset intensity.</li>
         <li><strong>Default Adjustments:</strong> A starting edit for every new photo, with per-camera presets and automatic lens correction.</li>
         <li><strong>Image Analytics:</strong> Real-time Vectorscope, Waveform, RGB Parade, and Histogram displays.</li>
         <li><strong>Copy & Paste Settings:</strong> Quickly transfer adjustments and masks between images. AI masks are generated again for every image.</li>
         <li><strong>Speed Edit:</strong> Hold W and drag on the photo to change sliders, with keyboard shortcuts to switch sliders and images.</li>
         <li><strong>Before / After Compare:</strong> Full original, split, and side-by-side compare modes.</li>
-        <li><strong>Undo/Redo History:</strong> Robust history tracking for every edit step.</li>
-        <li><strong>Compositions & Merging:</strong> Bracketed HDR merging, Focus Stacking, seamless Panorama Stitcher, and Collage Maker.</li>
+        <li><strong>Undo/Redo History:</strong> Robust history tracking for every edit step, kept for the last 20 photos you edited.</li>
+        <li><strong>Compositions & Merging:</strong> Panorama Stitcher with projections and boundary warp, HDR merge to a float DNG with automatic deghosting, Focus Stacking, and Collage Maker.</li>
         <li><strong>Film Negatives:</strong> Non-destructive negative conversion with color balance and print controls.</li>
-        <li><strong>Flexible Exporting:</strong> Export to JPEG, PNG, WebP, AVIF, TIFF, JXL, or LUT formats with custom watermarking and EXIF retention.</li><br><br>
+        <li><strong>Flexible Exporting:</strong> Export to JPEG, PNG, WebP, AVIF, TIFF, JXL, or LUT formats in sRGB, Display P3, Adobe RGB, ProPhoto RGB or Rec. 2020, as HDR JPEG or JXL, with custom watermarking, EXIF retention, and skipping of unchanged photos.</li><br><br>
       </ul>
     </td>
   </tr>
@@ -676,8 +806,9 @@ RapidRAW relies on [dnglab / rawler](https://github.com/dnglab/dnglab) for RAW f
 
 RapidRAW isn't just for RAW files! You can also import, edit, and convert standard image formats:
 
-- **Standard Formats:** `.jpg`, `.jpeg`, `.png`, `.webp`, `.jxl`, `.tiff`, `.tif`, `.bmp`, `.gif`
-- **High Dynamic Range (HDR) / Wide Gamut:** `.exr`, `.hdr`
+- **Standard Formats:** `.jpg`, `.jpeg`, `.png`, `.webp`, `.jxl`, `.avif`, `.tiff`, `.tif`, `.bmp`, `.gif`
+- **HEIC / HEIF:** `.heic`, `.heif` (Windows and macOS only, decoded by the system. HEIC uses the patented HEVC codec, so it isn't supported on Linux)
+- **High Dynamic Range (HDR) / Wide Gamut:** `.exr`, `.hdr`. HDR photos with a gain map (Ultra HDR JPEGs, iPhone HEICs, AVIFs) and PQ or HLG files also open as HDR.
 - **Graphics & Textures:** `.tga`, `.ico`, `.dds`
 - **Specialist Formats:** `.qoi`, `.ff`
 - **Netpbm Bitmaps:** `.pnm`, `.pbm`, `.pgm`, `.ppm`, `.pam`
@@ -1044,20 +1175,22 @@ RapidRAW is built to be lightweight and cross-platform. The minimum (tested) req
 **Hardware Recommendations:**
 
 - **RAM:** **16GB or more is highly recommended.** While the application may run on systems with less memory, performance is best with 16GB+ to handle high-resolution RAW files, undo history, and complex layer masking without slowdowns.
-- **GPU:** A dedicated GPU is recommended. RapidRAW relies heavily on GPU acceleration for its processing pipeline. Very old GPU architectures (generally pre-2015) or older integrated graphics may struggle, leading to instability or graphical artifacts.
+- **GPU:** A dedicated GPU is recommended. RapidRAW relies heavily on GPU acceleration for its processing pipeline. Very old GPU architectures (generally pre-2015) or older integrated graphics may struggle, leading to instability or graphical artifacts. If the GPU can't decode RAW files, RapidRAW decodes them on the CPU instead, which is slower.
 
 ### Common Problems
 
 <details>
 <summary>App crashes when opening an image / entering edit mode</summary>
 
-If the application crashes immediately when you try to start editing a picture, it is often due to the automatic selection of the GPU backend.
+If the application crashes immediately when you try to start editing a picture, it is often due to the automatic selection of the GPU backend. After a crash, RapidRAW tries another backend on the next start by itself. If it keeps crashing:
 
 1.  Open **Settings** on the **Home Screen** (Gear icon).
 2.  Navigate to the **Processing** tab.
 3.  Locate the **Processing Backend** setting.
 4.  Change it from **Auto** to a specific backend supported by your OS (e.g., **Vulkan**, **DirectX12**, **OpenGL**, or **Metal**).
 5.  Restart the application and try opening the image again. Experiment with different backends if the first one doesn't work.
+
+If only RAW files fail to open, set **RAW Decoding** in the same tab to **CPU**.
 
 </details>
 
@@ -1091,7 +1224,7 @@ On Linux, the image preview is drawn by the webview by default, which is slower 
 2.  Turn on **Enable Direct WGPU Render**.
 3.  Click **Save & Relaunch**.
 
-This option is still experimental on Linux. It is not available on **X11**.
+This option is still experimental on Linux. It is not available on **X11**. Monitor color management and the HDR preview also need it.
 
 </details>
 
