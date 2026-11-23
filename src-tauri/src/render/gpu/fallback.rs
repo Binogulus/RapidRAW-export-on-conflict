@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
 
 use crate::library::file_ops::write_file_atomic;
 use crate::render::gpu::context::app_handle;
@@ -31,7 +30,11 @@ pub fn gpu_identity(adapter: &str) -> String {
 }
 
 fn data_file(name: &str) -> Option<PathBuf> {
-    Some(app_handle()?.path().app_data_dir().ok()?.join(name))
+    Some(
+        crate::portable_paths::app_data_dir(app_handle()?)
+            .ok()?
+            .join(name),
+    )
 }
 
 pub fn load_record<T: DeserializeOwned>(name: &str) -> Option<T> {

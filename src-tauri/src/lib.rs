@@ -31,6 +31,7 @@ mod masks;
 mod merge;
 mod metadata;
 mod platform;
+mod portable_paths;
 mod render;
 mod retouch;
 
@@ -118,6 +119,8 @@ fn force_c_numeric_locale() {
 pub fn run() {
     #[cfg(target_os = "linux")]
     force_c_numeric_locale();
+
+    let portable_dir = crate::portable_paths::init_portable_mode();
 
     let _ = rayon::ThreadPoolBuilder::new()
         .stack_size(8 * 1024 * 1024)
@@ -260,7 +263,10 @@ pub fn run() {
                 crate::integrations::immich::start(&app_handle);
             }
 
-            if let Ok(cache_dir) = app_handle.path().app_cache_dir() {
+            if let Ok(cache_dir) = crate::portable_paths::app_cache_dir(&app_handle) {
+                let thumb_dir = cache_dir.join("thumbnails");
+                let _ = std::fs::create_dir_all(&thumb_dir);
+                let _ = app_handle.asset_protocol_scope().allow_directory(&thumb_dir, true);
                 crate::ai::denoise::initialize_cache_dir(&cache_dir);
                 crate::ai::upscale::initialize_cache_dir(&cache_dir);
                 crate::effects::maps::initialize_cache_dir(cache_dir.clone());
@@ -277,7 +283,7 @@ pub fn run() {
                 });
             }
 
-            if let Ok(config_dir) = app_handle.path().app_config_dir() {
+            if let Ok(config_dir) = crate::portable_paths::app_config_dir(&app_handle) {
                 let _ = std::fs::remove_file(config_dir.join(".gpu_init_crash_flag"));
             }
 
@@ -336,6 +342,9 @@ pub fn run() {
             }
 
             setup_logging(&app_handle);
+            if let Some(ref p_dir) = portable_dir {
+                log::info!("Portable mode active! Base directory: {:?}", p_dir);
+            }
 
             if let Some(backend) = &backend {
                 log::info!("Applied processing backend: {}", backend);

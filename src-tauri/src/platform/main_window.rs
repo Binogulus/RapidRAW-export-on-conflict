@@ -1,6 +1,3 @@
-#[cfg(not(target_os = "android"))]
-use tauri::Manager;
-
 use crate::app::launch_request::LaunchPayload;
 use crate::app::state::AppState;
 #[cfg(not(target_os = "android"))]
@@ -45,14 +42,16 @@ pub fn available_monitor_bounds(window: &tauri::WebviewWindow) -> Vec<MonitorBou
 
 #[cfg(not(target_os = "android"))]
 pub fn read_window_state(app_handle: &tauri::AppHandle, file_name: &str) -> Option<WindowState> {
-    let path = app_handle.path().app_config_dir().ok()?.join(file_name);
+    let path = crate::portable_paths::app_config_dir(app_handle)
+        .ok()?
+        .join(file_name);
     let contents = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&contents).ok()
 }
 
 #[cfg(not(target_os = "android"))]
 pub fn write_window_state(app_handle: &tauri::AppHandle, file_name: &str, state: &WindowState) {
-    if let Ok(config_dir) = app_handle.path().app_config_dir() {
+    if let Ok(config_dir) = crate::portable_paths::app_config_dir(app_handle) {
         let _ = std::fs::create_dir_all(&config_dir);
         if let Ok(json) = serde_json::to_string(state) {
             let _ = std::fs::write(config_dir.join(file_name), json);

@@ -74,10 +74,7 @@ fn lock_publish() -> MutexGuard<'static, ()> {
 }
 
 fn get_publish_manifests_path(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::portable_paths::app_data_dir(app_handle)?;
     if !data_dir.exists() {
         fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
     }

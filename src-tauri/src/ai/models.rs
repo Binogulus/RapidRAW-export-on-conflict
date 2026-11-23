@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tokenizers::Tokenizer;
 use tokio::sync::Mutex as TokioMutex;
 
@@ -679,7 +679,9 @@ pub struct ClipModels {
 }
 
 fn get_models_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf> {
-    let models_dir = app_handle.path().app_data_dir()?.join("models");
+    let models_dir = crate::portable_paths::app_data_dir(app_handle)
+        .map_err(|e| anyhow::anyhow!(e))?
+        .join("models");
     if !models_dir.exists() {
         fs::create_dir_all(&models_dir)?;
     }

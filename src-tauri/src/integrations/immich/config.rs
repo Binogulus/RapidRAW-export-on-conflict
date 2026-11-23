@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use super::secrets;
 
@@ -45,18 +45,12 @@ pub fn load(app_handle: &AppHandle) -> ImmichSettings {
 }
 
 fn key_file(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let dir = crate::portable_paths::app_data_dir(app_handle)?;
     Ok(dir.join("immich-api-key"))
 }
 
 pub fn default_cache_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app_handle
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?;
+    let dir = crate::portable_paths::app_cache_dir(app_handle)?;
     Ok(dir.join("immich"))
 }
 

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -29,10 +29,7 @@ pub enum AlbumItem {
 }
 
 fn get_albums_path(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?;
+    let data_dir = crate::portable_paths::app_data_dir(app_handle)?;
     let albums_dir = data_dir.join("albums");
     if !albums_dir.exists() {
         fs::create_dir_all(&albums_dir).map_err(|e| e.to_string())?;

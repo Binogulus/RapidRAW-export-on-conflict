@@ -3,7 +3,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
 use super::{Session, registry, session, sync};
 
@@ -29,11 +29,7 @@ pub fn prepare_export(
     with_original: bool,
 ) -> Result<PathBuf, String> {
     session(app_handle)?;
-    let root = app_handle
-        .path()
-        .app_cache_dir()
-        .map_err(|e| e.to_string())?
-        .join("immich-exports");
+    let root = crate::portable_paths::app_cache_dir(app_handle)?.join("immich-exports");
     let mut targets = EXPORT_TARGETS.lock().unwrap();
     if let Ok(entries) = std::fs::read_dir(&root) {
         for entry in entries.flatten() {

@@ -6,8 +6,6 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use tauri::AppHandle;
-#[cfg(not(target_os = "android"))]
-use tauri::Manager;
 use walkdir::WalkDir;
 
 #[derive(Serialize, Debug)]
@@ -352,11 +350,7 @@ pub fn delete_folder(path: String, app_handle: AppHandle) -> Result<(), String> 
 fn get_internal_library_root_path(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
     #[cfg(not(target_os = "android"))]
     {
-        let library_dir = app_handle
-            .path()
-            .app_data_dir()
-            .map_err(|e| e.to_string())?
-            .join("library");
+        let library_dir = crate::portable_paths::app_data_dir(app_handle)?.join("library");
 
         if !library_dir.exists() {
             fs::create_dir_all(&library_dir).map_err(|e| e.to_string())?;

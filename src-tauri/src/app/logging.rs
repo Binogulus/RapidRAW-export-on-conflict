@@ -1,10 +1,8 @@
 use std::fs;
 use std::io::Write;
 use std::panic;
-use tauri::Manager;
-
 pub fn setup_logging(app_handle: &tauri::AppHandle) {
-    let log_dir = match app_handle.path().app_log_dir() {
+    let log_dir = match crate::portable_paths::app_log_dir(app_handle) {
         Ok(dir) => dir,
         Err(e) => {
             eprintln!("Failed to get app log directory: {}", e);
@@ -85,7 +83,7 @@ pub fn setup_logging(app_handle: &tauri::AppHandle) {
 
 #[tauri::command]
 pub fn get_log_file_path(app_handle: tauri::AppHandle) -> Result<String, String> {
-    let log_dir = app_handle.path().app_log_dir().map_err(|e| e.to_string())?;
+    let log_dir = crate::portable_paths::app_log_dir(&app_handle)?;
     let log_file_path = log_dir.join("app.log");
     Ok(log_file_path.to_string_lossy().to_string())
 }

@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use serde_json::Value;
-use tauri::Manager;
 
 use crate::app::settings::AppSettings;
 use crate::export::settings::ExportSettings;
@@ -21,9 +20,7 @@ pub struct ExportRecords {
 
 impl ExportRecords {
     pub fn load(app_handle: &tauri::AppHandle) -> Self {
-        let file = app_handle
-            .path()
-            .app_data_dir()
+        let file = crate::portable_paths::app_data_dir(app_handle)
             .ok()
             .map(|dir| dir.join(RECORDS_FILE));
         Self {

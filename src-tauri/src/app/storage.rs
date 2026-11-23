@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use walkdir::WalkDir;
 
 use crate::app::settings::{
@@ -221,11 +221,10 @@ struct StorageDirs {
 }
 
 fn storage_dirs(app_handle: &AppHandle) -> Result<StorageDirs, String> {
-    let path = app_handle.path();
     Ok(StorageDirs {
-        cache: path.app_cache_dir().map_err(|e| e.to_string())?,
-        data: path.app_data_dir().map_err(|e| e.to_string())?,
-        logs: path.app_log_dir().map_err(|e| e.to_string())?,
+        cache: crate::portable_paths::app_cache_dir(app_handle)?,
+        data: crate::portable_paths::app_data_dir(app_handle)?,
+        logs: crate::portable_paths::app_log_dir(app_handle)?,
     })
 }
 

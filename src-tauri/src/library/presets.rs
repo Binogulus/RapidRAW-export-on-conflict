@@ -478,11 +478,7 @@ pub struct PresetImportResult {
 }
 
 fn get_presets_path(app_handle: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let presets_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("presets");
+    let presets_dir = crate::portable_paths::app_data_dir(app_handle)?.join("presets");
 
     if !presets_dir.exists() {
         fs::create_dir_all(&presets_dir).map_err(|e| e.to_string())?;
